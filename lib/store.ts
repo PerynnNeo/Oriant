@@ -19,7 +19,7 @@ import {
 import { cancelSpeech, loadVoicePref, primeVoices, saveVoicePref, speak, speechSupported } from "./speech";
 
 export type Screen =
-  | "landing" | "call" | "report" | "planner" | "design"
+  | "landing" | "onboarding" | "call" | "report" | "planner" | "design"
   | "build" | "validate" | "workspace" | "approvals";
 
 export type CallPhase = "speaking" | "listening" | "user-talking" | "review" | "paused" | "done";
@@ -36,7 +36,7 @@ interface CallState {
   canvasUp: boolean;
   muted: boolean;
   txOpen: boolean;
-  txTab: "transcript" | "notes";
+  txTab: "transcript" | "notes" | "brain";
   recording: boolean;
   transcribing: boolean;
   typedMode: boolean;
@@ -66,6 +66,30 @@ interface PlannerUi {
   cfgAgentId: string | null;
 }
 
+interface OnboardingState {
+  step: 1 | 2;
+  companyName: string;
+  industry: string;
+  region: string;
+  businessSize: string;
+  teamRoles: Record<string, boolean>;
+  teamRolesOther: string;
+  goals: Record<string, boolean>;
+  goalsOther: string;
+  automationPreference: string;
+  businessPlatforms: Record<string, boolean>;
+  businessPlatformsOther: string;
+  communications: Record<string, boolean>;
+  communicationsOther: string;
+  marketingSales: Record<string, boolean>;
+  marketingSalesOther: string;
+  operationsAdmin: Record<string, boolean>;
+  operationsAdminOther: string;
+  documents: Record<string, boolean>;
+  documentsOther: string;
+  uploadedFiles: string[];
+}
+
 export interface AppState {
   server: Db | null;
   providers: ProviderFlags | null;
@@ -81,6 +105,7 @@ export interface AppState {
   call: CallState;
   goals: Record<string, boolean>;
   systems: Record<string, boolean>;
+  onboarding: OnboardingState;
 
   design: DesignState;
   pl: PlannerUi;
@@ -99,6 +124,27 @@ export interface AppState {
   enterApp(): void;
   toLanding(): void;
   toggleFaq(i: number): void;
+  obSet(field:
+    "companyName" | "industry" | "region" | "businessSize" | "automationPreference" |
+    "teamRolesOther" | "goalsOther" | "businessPlatformsOther" | "communicationsOther" |
+    "marketingSalesOther" | "operationsAdminOther" | "documentsOther",
+  value: string): void;
+  obToggle(group:
+    "teamRoles" | "goals" | "businessPlatforms" | "communications" | "marketingSales" | "operationsAdmin" | "documents",
+  key: string): void;
+  obAddCustomOption(group:
+    "teamRoles" | "goals" | "businessPlatforms" | "communications" | "marketingSales" | "operationsAdmin" | "documents",
+  ): void;
+  obRenameCustomOption(group:
+    "teamRoles" | "goals" | "businessPlatforms" | "communications" | "marketingSales" | "operationsAdmin" | "documents",
+  oldKey: string, nextKey: string): void;
+  obDeleteCustomOption(group:
+    "teamRoles" | "goals" | "businessPlatforms" | "communications" | "marketingSales" | "operationsAdmin" | "documents",
+  key: string): void;
+  obUpload(files: string[]): void;
+  obNext(): void;
+  obBack(): void;
+  startDiscovery(mode: "voice" | "chat"): void;
 
   enterCall(idx: number, keep: boolean): void;
   callFill(id: string, val: string): void;
@@ -116,7 +162,7 @@ export interface AppState {
   callPick(opt: string): void;
   callMute(): void;
   callToggleTx(): void;
-  callTxTabSet(t: "transcript" | "notes"): void;
+  callTxTabSet(t: "transcript" | "notes" | "brain"): void;
   toggleGoal(k: string): void;
   toggleSystem(k: string): void;
   callToReport(): Promise<void>;
@@ -217,6 +263,92 @@ const freshDesign = (): DesignState => ({
   typed: "", filled: {}, startedAt: 0, uploaded: false,
 });
 
+const freshOnboarding = (): OnboardingState => ({
+  step: 1,
+  companyName: "",
+  industry: "",
+  region: "",
+  businessSize: "",
+  teamRoles: {
+    Sales: false,
+    Marketing: false,
+    "Customer Support": false,
+    Operations: false,
+    Finance: false,
+    HR: false,
+    Other: false,
+  },
+  teamRolesOther: "",
+  goals: {
+    "Save time": true,
+    "Reduce repetitive work": true,
+    "Increase sales": false,
+    "Improve customer support": false,
+    "Improve operations": false,
+    "Reduce costs": false,
+    Other: false,
+  },
+  goalsOther: "",
+  automationPreference: "",
+  businessPlatforms: {
+    "Online store / ecommerce": false,
+    Marketplace: false,
+    "Physical store / POS": false,
+    "Appointments / bookings": false,
+    "Service business / projects": false,
+    Wholesale: false,
+    Manufacturing: false,
+    Hospitality: false,
+    Healthcare: false,
+    Education: false,
+    "Logistics / field operations": false,
+    "Membership / subscription": false,
+    Other: false,
+  },
+  businessPlatformsOther: "",
+  communications: {
+    Email: false,
+    Phone: false,
+    WhatsApp: false,
+    "Slack / Teams": false,
+    "Website chat": false,
+    "Social DMs": false,
+    Other: false,
+  },
+  communicationsOther: "",
+  marketingSales: {
+    CRM: false,
+    "Email marketing": false,
+    "Paid ads": false,
+    "Social scheduling": false,
+    "Lead forms": false,
+    "Sales pipeline": false,
+    Other: false,
+  },
+  marketingSalesOther: "",
+  operationsAdmin: {
+    Accounting: false,
+    Inventory: false,
+    "Project management": false,
+    "Customer support desk": false,
+    "File storage / docs": false,
+    HR: false,
+    Other: false,
+  },
+  operationsAdminOther: "",
+  documents: {
+    "Lean Canvas": false,
+    SOPs: false,
+    "Organisation Chart": false,
+    "Process Documentation": false,
+    "Employee Handbook": false,
+    Other: false,
+    Upload: false,
+  },
+  documentsOther: "",
+  uploadedFiles: [],
+});
+
 export const useApp = create<AppState>((set, get) => {
   /* helpers */
   const applyPayload = (body: unknown) => {
@@ -304,6 +436,7 @@ export const useApp = create<AppState>((set, get) => {
     call: freshCall(),
     goals: { ...DEFAULT_GOALS },
     systems: { ...DEFAULT_SYSTEMS },
+    onboarding: freshOnboarding(),
     design: freshDesign(),
     pl: { tab: "workflow", view: "plan", sel: "frontdesk", diff: null, nlText: "", nlBusy: false, cfg: { ...DEFAULT_CONFIG }, cfgAgentId: null },
     approvalSel: "a1",
@@ -338,6 +471,7 @@ export const useApp = create<AppState>((set, get) => {
       set({
         screen: "landing", call: freshCall(), design: freshDesign(),
         goals: { ...DEFAULT_GOALS }, systems: { ...DEFAULT_SYSTEMS },
+        onboarding: freshOnboarding(),
         pl: { tab: "workflow", view: "plan", sel: "frontdesk", diff: null, nlText: "", nlBusy: false, cfg: { ...DEFAULT_CONFIG }, cfgAgentId: null },
         approvalSel: "a1", generating: false, validating: false, error: null,
       });
@@ -355,7 +489,7 @@ export const useApp = create<AppState>((set, get) => {
     enterApp() {
       // resume where the lifecycle actually is (server is the authority)
       const phase = get().server?.phase;
-      if (!phase || phase === "onboarding") { get().enterCall(0, false); return; }
+      if (!phase || phase === "onboarding") { get().go("onboarding"); return; }
       const map: Record<string, Screen> = {
         report_draft: "report", report_approved: "report",
         plan_draft: "planner", plan_approved: "build",
@@ -367,6 +501,142 @@ export const useApp = create<AppState>((set, get) => {
     },
     toLanding() { clearTimers(); stopClock(); cancelRecording(); set({ screen: "landing" }); },
     toggleFaq(i) { set((s) => ({ faqOpen: s.faqOpen === i ? -1 : i })); },
+    obSet(field, value) { set((s) => ({ onboarding: { ...s.onboarding, [field]: value } })); },
+    obToggle(group, key) {
+      set((s) => ({
+        onboarding: {
+          ...s.onboarding,
+          [group]: { ...s.onboarding[group], [key]: !s.onboarding[group][key] },
+        },
+      }));
+    },
+    obAddCustomOption(group) {
+      set((s) => {
+        const draftField = ({
+          teamRoles: "teamRolesOther",
+          goals: "goalsOther",
+          businessPlatforms: "businessPlatformsOther",
+          communications: "communicationsOther",
+          marketingSales: "marketingSalesOther",
+          operationsAdmin: "operationsAdminOther",
+          documents: "documentsOther",
+        } as const)[group];
+        const raw = s.onboarding[draftField].trim();
+        if (!raw) return s;
+        const existing = Object.keys(s.onboarding[group]).find((key) => key.toLowerCase() === raw.toLowerCase());
+        return {
+          onboarding: {
+            ...s.onboarding,
+            [group]: existing
+              ? { ...s.onboarding[group], [existing]: true }
+              : { ...s.onboarding[group], [raw]: true },
+            [draftField]: "",
+          },
+        };
+      });
+    },
+    obRenameCustomOption(group, oldKey, nextKey) {
+      set((s) => {
+        const trimmed = nextKey.trim();
+        if (!trimmed || trimmed === oldKey) return s;
+        const current = s.onboarding[group];
+        if (!(oldKey in current)) return s;
+        const match = Object.keys(current).find((key) => key.toLowerCase() === trimmed.toLowerCase());
+        const nextGroup = { ...current };
+        const wasSelected = !!nextGroup[oldKey];
+        delete nextGroup[oldKey];
+        if (match && match !== oldKey) nextGroup[match] = nextGroup[match] || wasSelected;
+        else nextGroup[trimmed] = wasSelected;
+        return {
+          onboarding: {
+            ...s.onboarding,
+            [group]: nextGroup,
+          },
+        };
+      });
+    },
+    obDeleteCustomOption(group, key) {
+      set((s) => {
+        const current = s.onboarding[group];
+        if (!(key in current)) return s;
+        const nextGroup = { ...current };
+        delete nextGroup[key];
+        return {
+          onboarding: {
+            ...s.onboarding,
+            [group]: nextGroup,
+          },
+        };
+      });
+    },
+    obUpload(files) {
+      set((s) => ({
+        onboarding: {
+          ...s.onboarding,
+          documents: { ...s.onboarding.documents, Upload: files.length > 0 || s.onboarding.documents.Upload },
+          uploadedFiles: files,
+        },
+      }));
+    },
+    obNext() { set((s) => ({ onboarding: { ...s.onboarding, step: 2 } })); },
+    obBack() { set((s) => ({ onboarding: { ...s.onboarding, step: 1 } })); },
+    startDiscovery(mode) {
+      const ob = get().onboarding;
+      const selected = (m: Record<string, boolean>, other?: string) => {
+        const vals = Object.keys(m).filter((k) => m[k] && k !== "Other" && k !== "Upload");
+        if (m.Other && other?.trim()) vals.push(`Other: ${other.trim()}`);
+        return vals;
+      };
+      const goalMap: Record<string, string> = {
+        "Save time": "Response time",
+        "Reduce repetitive work": "Support capacity",
+        "Increase sales": "Wholesale growth",
+        "Improve customer support": "Response time",
+        "Improve operations": "Fewer stockouts",
+        "Reduce costs": "Weekly reporting",
+      };
+      const nextGoals = Object.fromEntries(Object.keys(DEFAULT_GOALS).map((k) => [k, false])) as Record<string, boolean>;
+      selected(ob.goals, ob.goalsOther).forEach((label) => {
+        const mapped = goalMap[label];
+        if (mapped) nextGoals[mapped] = true;
+      });
+      const nextSystems = Object.fromEntries(Object.keys(DEFAULT_SYSTEMS).map((k) => [k, false])) as Record<string, boolean>;
+      if (ob.businessPlatforms["Online store / ecommerce"]) nextSystems.Shopify = true;
+      if (ob.operationsAdmin.Accounting) nextSystems.QuickBooks = true;
+      if (ob.operationsAdmin["File storage / docs"]) nextSystems["Google Sheets"] = true;
+      if (ob.communications.Email) nextSystems.Gmail = true;
+      if (ob.communications["Slack / Teams"]) nextSystems.Slack = true;
+      if (ob.operationsAdmin["Customer support desk"]) nextSystems.Gorgias = true;
+      if (ob.communications["Social DMs"]) nextSystems.Instagram = true;
+      const snapshot = {
+        company_name: ob.companyName,
+        industry: ob.industry,
+        country_region: ob.region,
+        business_size: ob.businessSize,
+        team_roles: selected(ob.teamRoles, ob.teamRolesOther).join(", "),
+        business_goals: selected(ob.goals, ob.goalsOther).join(", "),
+        automation_preference: ob.automationPreference,
+        business_platforms: selected(ob.businessPlatforms, ob.businessPlatformsOther).join(", "),
+        communication_channels: selected(ob.communications, ob.communicationsOther).join(", "),
+        marketing_sales_stack: selected(ob.marketingSales, ob.marketingSalesOther).join(", "),
+        operations_admin_stack: selected(ob.operationsAdmin, ob.operationsAdminOther).join(", "),
+        uploaded_information: selected(ob.documents, ob.documentsOther).join(", "),
+        uploaded_files: ob.uploadedFiles.join(", "),
+      };
+
+      get().enterCall(0, false);
+      set((s) => ({
+        goals: nextGoals,
+        systems: nextSystems,
+        call: {
+          ...s.call,
+          filled: { ...s.call.filled, ...snapshot },
+          typedMode: mode === "chat",
+          phase: mode === "chat" ? "review" : s.call.phase,
+          draft: mode === "chat" ? (CALL_CARDS[0]?.sample ?? "") : "",
+        },
+      }));
+    },
 
     /* ── the kickoff call ──────────────────────────────────────────────── */
 

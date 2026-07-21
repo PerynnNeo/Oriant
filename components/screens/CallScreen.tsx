@@ -1,6 +1,6 @@
 "use client";
 /**
- * Call screen — the voice kickoff call with Margo.
+ * Call screen — the guided business discovery session.
  * Port of reference/Margo.dc.html:273-369 (CALL section).
  */
 import { useApp } from "@/lib/store";
@@ -35,8 +35,8 @@ export default function CallScreen() {
         {v.callDone && (
           <div style={sx({ textAlign: "center", animation: "fadeUp .5s ease both" })}>
             <span style={sx({ width: 60, height: 60, borderRadius: "50%", background: "var(--forest)", color: "var(--paper)", display: "inline-grid", placeItems: "center", fontSize: 28 })}>✓</span>
-            <h1 style={sx({ fontFamily: "var(--disp)", fontWeight: 800, fontSize: 40, letterSpacing: "-.03em", margin: "18px 0 6px" })}>Great call.</h1>
-            <p style={sx({ fontSize: 16, color: "var(--ink2)", maxWidth: "40ch", margin: "0 auto 22px" })}>I’m writing everything up into your company brief — you’ll get to edit and approve it.</p>
+            <h1 style={sx({ fontFamily: "var(--disp)", fontWeight: 800, fontSize: 40, letterSpacing: "-.03em", margin: "18px 0 6px" })}>Discovery complete.</h1>
+            <p style={sx({ fontSize: 16, color: "var(--ink2)", maxWidth: "40ch", margin: "0 auto 22px" })}>I&apos;m turning this into your company brief now so you can edit and approve it.</p>
             {briefBusy ? (
               <button style={sx({ display: "inline-flex", alignItems: "center", gap: 10, background: "var(--paper3)", color: "var(--ink3)", border: "none", borderRadius: 999, padding: "15px 28px", fontSize: 15, fontWeight: 600, cursor: "default" })}>
                 <span style={sx({ width: 14, height: 14, border: "2px solid var(--ink3)", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "spin .7s linear infinite" })} />
@@ -57,14 +57,14 @@ export default function CallScreen() {
         {v.callPaused && (
           <div style={sx({ textAlign: "center", animation: "fadeUp .4s ease both" })}>
             <span style={sx({ width: 80, height: 80, borderRadius: "50%", background: "var(--paper2)", border: "1px solid var(--line2)", display: "inline-grid", placeItems: "center", fontSize: 30, color: "var(--ink3)" })}>⏸</span>
-            <h2 style={sx({ fontFamily: "var(--disp)", fontWeight: 700, fontSize: 26, margin: "16px 0 4px" })}>Call paused</h2>
-            <p style={sx({ fontSize: 14.5, color: "var(--ink2)", margin: "0 0 20px" })}>Everything’s saved. Pick up right where you left off.</p>
+            <h2 style={sx({ fontFamily: "var(--disp)", fontWeight: 700, fontSize: 26, margin: "16px 0 4px" })}>Discovery paused</h2>
+            <p style={sx({ fontSize: 14.5, color: "var(--ink2)", margin: "0 0 20px" })}>Everything&apos;s saved. Pick up right where you left off.</p>
             <button
               onClick={s.resumeCall}
               className="hv-bg"
               style={sx({ background: "var(--ink)", color: "var(--paper)", border: "none", borderRadius: 999, padding: "14px 26px", fontSize: 15, fontWeight: 600, cursor: "pointer", "--hv-bg": "var(--forest)" })}
             >
-              Resume call →
+              Resume discovery →
             </button>
           </div>
         )}
@@ -283,6 +283,12 @@ export default function CallScreen() {
             >
               Notes
             </button>
+            <button
+              onClick={() => s.callTxTabSet("brain")}
+              style={sx({ flex: 1, background: "transparent", border: "none", borderBottom: `2px solid ${v.txIsBrain ? "var(--ink)" : "var(--line)"}`, padding: "8px 0", fontSize: 13, fontWeight: 600, color: v.txIsBrain ? "var(--ink)" : "var(--ink3)", cursor: "pointer", fontFamily: "var(--sans)" })}
+            >
+              Brain
+            </button>
           </div>
           <div style={sx({ flex: 1, overflowY: "auto", padding: "10px 16px", minHeight: 0 })}>
             {v.txIsTranscript &&
@@ -302,6 +308,22 @@ export default function CallScreen() {
                   {n}
                 </div>
               ))}
+            {v.txIsBrain &&
+              <div style={sx({ display: "grid", gap: 14, paddingTop: 2 })}>
+                {v.callBrain.map((section, i) => (
+                  <div key={section.title + i} style={sx({ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 14, padding: "12px 12px 10px" })}>
+                    <div style={sx({ fontFamily: "var(--mono)", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--ink3)", marginBottom: 9 })}>{section.title}</div>
+                    <div style={sx({ display: "grid", gap: 8 })}>
+                      {section.items.map((item: string, j: number) => (
+                        <div key={item + j} style={sx({ display: "grid", gridTemplateColumns: "10px 1fr", gap: 8, fontSize: 12.5, lineHeight: 1.45, color: "var(--ink2)" })}>
+                          <span style={sx({ color: "var(--forest)" })}>•</span>
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>}
           </div>
           <div style={sx({ borderTop: "1px solid var(--line)", padding: "11px 16px", fontFamily: "var(--mono)", fontSize: 10, letterSpacing: ".06em", color: "var(--ink3)" })}>
             {v.voiceLive ? "Powered by Nosana · Whisper transcription" : "Powered by Margo · demo transcription"}

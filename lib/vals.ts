@@ -29,9 +29,9 @@ export const planned = (s: AppState): AgentDef[] => team(s).filter((a) => a.inPl
 
 /* ── sidebar journey ─────────────────────────────────────────────────────── */
 export const ORDER = ["call", "report", "planner", "build", "validate", "workspace", "approvals"] as const;
-export const LABELS = ["The call", "The brief", "Build the team", "The factory", "The sandbox", "The floor", "Your desk"];
+export const LABELS = ["Discovery", "The brief", "Build the team", "The factory", "The sandbox", "The floor", "Your desk"];
 export const META: Record<string, [string, string]> = {
-  call: ["Phase 1", "Kickoff call with Margo"],
+  call: ["Phase 1", "Business discovery"],
   report: ["Phase 1", "The company brief"],
   design: ["Phase 2", "Designing a custom agent"],
   planner: ["Phase 2", "Build the team"],
@@ -102,6 +102,68 @@ export function callVals(s: AppState) {
   if (filled.constraints) notes.push("Guardrails: " + filled.constraints);
   if (!notes.length) notes.push("Margo is jotting notes as you talk…");
 
+  const pick = (m: Record<string, boolean>, other?: string) => {
+    const vals = Object.keys(m).filter((k) => m[k] && k !== "Other" && k !== "Upload");
+    if (m.Other && other?.trim()) vals.push(other.trim());
+    return vals;
+  };
+  const compact = (vals: string[]) => vals.length ? vals : ["Not captured yet"];
+  const brain = [
+    {
+      title: "Company",
+      items: compact([
+        s.onboarding.companyName && `Name: ${s.onboarding.companyName}`,
+        s.onboarding.industry && `Industry: ${s.onboarding.industry}`,
+        s.onboarding.region && `Region: ${s.onboarding.region}`,
+        s.onboarding.businessSize && `Size: ${s.onboarding.businessSize}`,
+      ].filter(Boolean) as string[]),
+    },
+    {
+      title: "Team",
+      items: compact([
+        ...pick(s.onboarding.teamRoles, s.onboarding.teamRolesOther).map((v) => `Role: ${v}`),
+        filled.team_roles && `Discovery detail: ${filled.team_roles}`,
+      ].filter(Boolean) as string[]),
+    },
+    {
+      title: "Goals",
+      items: compact([
+        ...pick(s.onboarding.goals, s.onboarding.goalsOther).map((v) => `Priority: ${v}`),
+        s.onboarding.automationPreference && `AI support: ${s.onboarding.automationPreference}`,
+        filled.business_goals && `Discovery detail: ${filled.business_goals}`,
+      ].filter(Boolean) as string[]),
+    },
+    {
+      title: "Operating Context",
+      items: compact([
+        ...pick(s.onboarding.businessPlatforms, s.onboarding.businessPlatformsOther).map((v) => `Business platform: ${v}`),
+        ...pick(s.onboarding.communications, s.onboarding.communicationsOther).map((v) => `Communication: ${v}`),
+        ...pick(s.onboarding.marketingSales, s.onboarding.marketingSalesOther).map((v) => `Marketing/Sales: ${v}`),
+        ...pick(s.onboarding.operationsAdmin, s.onboarding.operationsAdminOther).map((v) => `Operations/Admin: ${v}`),
+      ]),
+    },
+    {
+      title: "Discovery Notes",
+      items: compact([
+        filled.profile && `Business summary: ${filled.profile}`,
+        filled.ops && `Recurring work: ${filled.ops}`,
+        filled.constraints && `Guardrails: ${filled.constraints}`,
+        filled.autosend && `Autonomy guidance: ${filled.autosend}`,
+        filled.wholesale && `Workflow detail: ${filled.wholesale}`,
+        filled.volume && `Volume: ${filled.volume}`,
+      ].filter(Boolean) as string[]),
+    },
+    {
+      title: "Knowledge Base",
+      items: compact([
+        ...pick(s.onboarding.documents, s.onboarding.documentsOther).map((v) => `Document: ${v}`),
+        ...s.onboarding.uploadedFiles.map((v) => `Upload: ${v}`),
+        c.canvasUp ? "Lean Canvas uploaded in session" : "",
+        filled.lc_problem ? "Lean Canvas/problem captured" : "",
+      ].filter(Boolean) as string[]),
+    },
+  ];
+
   const waveBars = Array.from({ length: 34 }, (_, i) => ({
     h: 9 + Math.round(30 * Math.exp(-Math.pow((i - 16.5) / 9, 2))),
     delay: ((i % 7) * 0.09).toFixed(2) + "s",
@@ -140,10 +202,12 @@ export function callVals(s: AppState) {
     callTimer: mmss(c.startedAt),
     callTx: tx,
     callNotes: notes,
+    callBrain: brain,
     waveBars,
     callTxOpen: c.txOpen,
     txIsTranscript: c.txTab === "transcript",
     txIsNotes: c.txTab === "notes",
+    txIsBrain: c.txTab === "brain",
     muteLabel: c.muted ? "Unmute" : "Mute",
     voiceOn: s.voiceOn,
     voiceSupported: s.voiceSupported,

@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useApp } from "@/lib/store";
 import { sx } from "@/lib/ui";
 import Landing from "@/components/Landing";
+import Onboarding from "@/components/Onboarding";
 import AppShell from "@/components/AppShell";
 
 export default function MargoApp() {
@@ -17,7 +18,7 @@ export default function MargoApp() {
 
   return (
     <div style={{ minHeight: "100vh" }}>
-      {screen === "landing" ? <Landing /> : <AppShell />}
+      {screen === "landing" ? <Landing /> : screen === "onboarding" ? <Onboarding /> : <AppShell />}
       {error && (
         <div
           onClick={clearError}
