@@ -30,7 +30,7 @@
  * opacity fades still run, so all content is always present.
  */
 import { Fragment, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import DemoGateLink from "./DemoGateLink";
 import { ArrowRight } from "lucide-react";
 import {
   motion,
@@ -158,10 +158,10 @@ export default function HeroSection() {
               delay: TAIL_DELAY + STAGGER,
             }}
           >
-            <Link href={CTA.primary.href} className="lp-btn lp-btn--primary">
+            <DemoGateLink className="lp-btn lp-btn--primary">
               {CTA.primary.label}
               <ArrowRight size={18} strokeWidth={2} aria-hidden="true" />
-            </Link>
+            </DemoGateLink>
             <a href={CTA.secondary.href} className="lp-btn lp-btn--ghost">
               {CTA.secondary.label}
             </a>

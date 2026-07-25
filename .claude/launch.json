@@ -4,9 +4,9 @@
     {
       "name": "oriant-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "C:\\Users\\mango\\Claude\\Korea\\Margo",
-      "port": 3000
+      "runtimeArgs": ["run", "dev", "--", "-p", "3020"],
+      "cwd": "C:\\Users\\mango\\Claude\\Korea\\Oriant\\Oriant",
+      "port": 3020
     }
   ]
 }
