@@ -108,7 +108,10 @@ const NODE_LAYOUT: Record<
      to a person (§3.2), mirroring the dashboard slot below */
   approval: { tier: "a", x: 640, y: 66, delay: 0.58, drift: -4.3 },
   interview: { tier: "c", x: 52, y: 235, delay: 0.66, drift: -3.5, edge: "left" },
-  deployment: { tier: "c", x: 1228, y: 205, delay: 0.74, drift: -7.1, edge: "right" },
+  /* deployment mirrors the executor slot on the bottom-right so the lower
+     band reads symmetrically (executor · dashboard · deployment) — it is no
+     longer an edge-cropped node. */
+  deployment: { tier: "b", x: 980, y: 368, delay: 0.46, drift: -7.1 },
 };
 
 const GLYPHS: Record<FieldNodeId, LucideIcon> = {
@@ -133,7 +136,8 @@ const PATHS: Record<FieldNodeId, string> = {
   approval: "M640 220 C660 170 655 115 640 66",
   interview: "M640 220 C455 235 250 232 52 235",
   executor: "M640 220 C525 275 405 330 300 368",
-  deployment: "M640 220 C835 213 1040 208 1228 205",
+  /* mirror of the executor curve — routes down-right to the new bottom slot */
+  deployment: "M640 220 C755 275 875 330 980 368",
   dashboard: "M640 220 C660 270 655 325 640 375",
 };
 
@@ -156,7 +160,7 @@ const FLOAT_LABELS: {
   teal?: boolean;
 }[] = [
   { text: "context in", x: 462, y: 190, delay: 2.4 },
-  { text: "plan out", x: 838, y: 184, delay: 2.05 },
+  { text: "plan out", x: 840, y: 306, delay: 2.05 },
   { text: "your decision", x: 724, y: 136, delay: 2.55, teal: true },
 ];
 
