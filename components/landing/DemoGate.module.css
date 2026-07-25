@@ -1,0 +1,166 @@
+/**
+ * DemoGate.module.css — guided-demo gate + locked preview backdrop
+ * (marketing hardening spec §5). Premium, intentional, never an error
+ * page: sanitized blurred product art behind a calm panel that follows
+ * the landing's card language (radius/shadow/type tokens from .lp).
+ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+}
+
+/* ── Locked preview backdrop (decorative, non-interactive) ─────────── */
+
+.preview {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  background: var(--lp-dark-bg, #111827);
+}
+
+.previewImg {
+  position: absolute;
+  inset: -2.5%;
+  width: 105%;
+  height: 105%;
+  object-fit: cover;
+  object-position: center top;
+  /* Asset ships pre-blurred; this finishes the 10-16px treatment and
+     desaturates so the panel owns the attention. */
+  filter: blur(7px) saturate(0.82);
+  transform: scale(1.02);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      120% 90% at 50% 8%,
+      rgba(17, 24, 39, 0.38) 0%,
+      rgba(17, 24, 39, 0.66) 62%,
+      rgba(17, 24, 39, 0.8) 100%
+    ),
+    rgba(30, 45, 92, 0.18);
+}
+
+/* ── Panel ─────────────────────────────────────────────────────────── */
+
+.panel {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  background: var(--lp-surface);
+  border: 1px solid var(--lp-border);
+  border-radius: 24px;
+  box-shadow: 0 48px 96px -40px rgba(6, 10, 22, 0.65);
+  padding: 42px 44px 34px;
+  outline: none;
+}
+
+.close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--lp-radius-chip);
+  background: transparent;
+  color: var(--lp-muted-strong);
+  cursor: pointer;
+  transition: background 0.18s var(--lp-ease), color 0.18s var(--lp-ease);
+}
+.close:hover {
+  background: var(--lp-bg-alt);
+  color: var(--lp-ink);
+}
+.close:focus-visible {
+  outline: 2px solid var(--lp-accent);
+  outline-offset: 2px;
+}
+
+.eyebrow {
+  color: var(--lp-accent);
+  margin-bottom: 14px;
+}
+
+.title {
+  font-family: var(--lp-font-sans);
+  font-size: clamp(24px, 3.2vw, 30px);
+  line-height: 1.14;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: var(--lp-ink);
+  margin: 0 0 14px;
+  padding-right: 30px;
+}
+
+.body {
+  font-size: 15.5px;
+  line-height: 1.62;
+  color: var(--lp-muted-strong);
+  margin: 0 0 12px;
+}
+
+.supporting {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--lp-muted-strong);
+  margin: 0 0 26px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.actionBtn {
+  flex: none;
+}
+
+.note {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--lp-muted-strong);
+  border-top: 1px solid var(--lp-border);
+  padding-top: 16px;
+  margin: 0;
+}
+
+/* ── Mobile: compact bottom sheet (spec §5) ────────────────────────── */
+
+@media (max-width: 640px) {
+  .overlay {
+    place-items: end center;
+    padding: 0;
+  }
+  .panel {
+    width: 100%;
+    border-radius: 22px 22px 0 0;
+    border-bottom: none;
+    padding: 32px 24px calc(26px + env(safe-area-inset-bottom, 0px));
+  }
+  .previewImg {
+    object-position: left top;
+  }
+  .actions {
+    flex-direction: column;
+  }
+  .actionBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}

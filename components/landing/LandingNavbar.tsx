@@ -34,6 +34,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { CTA, NAV_LINKS } from "@/lib/landing-content";
 import { DUR, EASE } from "./motion";
+import DemoGateLink from "./DemoGateLink";
 import styles from "./LandingNavbar.module.css";
 
 /** Capsule morph duration (assignment: ~0.4s with the shared easing). */
@@ -274,13 +275,10 @@ export default function LandingNavbar() {
               )}
             </AnimatePresence>
 
-            <a
-              href={CTA.primary.href}
-              className="lp-btn lp-btn--primary lp-btn--sm"
-            >
+            <DemoGateLink className="lp-btn lp-btn--primary lp-btn--sm">
               <span className={styles.ctaFull}>{CTA.primary.label}</span>
               <span className={styles.ctaShort}>Start Free</span>
-            </a>
+            </DemoGateLink>
 
             <div className={styles.menuWrap}>
               <button

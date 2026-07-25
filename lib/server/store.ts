@@ -7,6 +7,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import type { Db } from "../contracts";
 import { FIXTURE_CALENDAR, ORG } from "../fixtures";
+import { isMarketingSite } from "@/lib/site-mode";
+
+/* Marketing hardening: the shared demo store must not be readable or
+   writable in the public deployment. Middleware already blocks /api;
+   this makes any bypassed handler fail before touching state. */
+function assertProductMode(): void {
+  if (isMarketingSite()) {
+    throw new Error("The product API is disabled in the marketing deployment.");
+  }
+}
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
@@ -35,6 +45,7 @@ function freshDb(): Db {
 const g = globalThis as unknown as { __margoDb?: Db; __margoLock?: Promise<unknown> };
 
 export async function loadDb(): Promise<Db> {
+  assertProductMode();
   if (g.__margoDb) return g.__margoDb;
   try {
     const raw = await fs.readFile(DB_PATH, "utf-8");
@@ -46,6 +57,7 @@ export async function loadDb(): Promise<Db> {
 }
 
 export async function saveDb(db: Db): Promise<void> {
+  assertProductMode();
   g.__margoDb = db;
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");

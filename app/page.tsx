@@ -15,11 +15,15 @@ import ImprovementLoop from "@/components/landing/ImprovementLoop";
 import FAQSection from "@/components/landing/FAQSection";
 import FinalCTA from "@/components/landing/FinalCTA";
 import LandingFooter from "@/components/landing/LandingFooter";
+import DemoGateModal from "@/components/landing/DemoGateModal";
+import DemoGateController from "@/components/landing/DemoGateController";
 
 export default function Page() {
   return (
     <div className="lp">
       <SmoothScroll />
+      <DemoGateController />
+      <DemoGateModal />
       <LandingMotionProvider>
         <LandingNavbar />
         <main id="top">

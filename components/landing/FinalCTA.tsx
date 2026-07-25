@@ -19,7 +19,7 @@
  * then body and CTA row stagger in. whileInView, once.
  */
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import DemoGateLink from "./DemoGateLink";
 import { motion, useInView, type Variants } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { CTA, FINAL_CTA } from "@/lib/landing-content";
@@ -147,13 +147,10 @@ export default function FinalCTA() {
             {FINAL_CTA.body}
           </motion.p>
           <motion.div className={styles.ctaRow} variants={fadeVariants} custom={0.7}>
-            <Link
-              href={CTA.primary.href}
-              className={`lp-btn lp-btn--primary ${styles.btn}`}
-            >
+            <DemoGateLink className={`lp-btn lp-btn--primary ${styles.btn}`}>
               {CTA.primary.label}
               <ArrowRight size={18} strokeWidth={2} aria-hidden="true" />
-            </Link>
+            </DemoGateLink>
             <a
               href={FINAL_CTA.secondary.href}
               className={`lp-btn lp-btn--ghost ${styles.btn}`}
