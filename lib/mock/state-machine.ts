@@ -64,12 +64,32 @@ export function homeRouteFor(state: JourneyState): string {
   }
 }
 
-/** Minimum journey state required to visit a route (prefix match). */
-const ROUTE_GATES: { prefix: string; min: JourneyState }[] = [
+/** Extra state a route gate may need beyond the linear journey (item 5). */
+export interface GateContext {
+  journey: JourneyState;
+  /** Has the owner opened /app/integrations at least once this plan cycle. */
+  hasVisitedIntegrations: boolean;
+}
+
+/**
+ * Whether the Integrations step counts as "done" for gating purposes.
+ * Currently just visiting the page — the product decision for now is that
+ * connecting integrations itself stays optional pre-build. Swap this one
+ * function to require actual connections (e.g. every `required` integration
+ * having `status === "connected"`) once real OAuth (item 6) makes that a
+ * meaningful bar; every gate that references it updates automatically.
+ */
+export function integrationsGateSatisfied(ctx: GateContext): boolean {
+  return ctx.hasVisitedIntegrations;
+}
+
+/** Minimum journey state required to visit a route (prefix match), plus an
+ *  optional extra condition beyond the linear journey. */
+const ROUTE_GATES: { prefix: string; min: JourneyState; extra?: (ctx: GateContext) => boolean }[] = [
   { prefix: "/app/workspace", min: "active_workspace" },
   { prefix: "/app/deploy", min: "ready_to_activate" },
   { prefix: "/app/sandbox", min: "sandbox_ready" },
-  { prefix: "/app/build", min: "plan_approved" },
+  { prefix: "/app/build", min: "plan_approved", extra: integrationsGateSatisfied },
   { prefix: "/app/integrations", min: "report_approved" },
   { prefix: "/app/planner", min: "report_approved" },
   { prefix: "/app/discovery/report", min: "report_review" },
@@ -79,13 +99,17 @@ const ROUTE_GATES: { prefix: string; min: JourneyState }[] = [
 
 /**
  * Guard a navigation: returns null if allowed, else the route to redirect to
- * (the current step's home). Backward navigation is always allowed.
+ * (the current step's home). Backward navigation is always allowed. `/app/build`
+ * additionally requires having visited Integrations first (item 5) — a plan
+ * -approved user who deep-links straight to Build gets bounced to Integrations,
+ * not Build, so the redirect itself teaches the required step.
  */
-export function guardRoute(pathname: string, state: JourneyState): string | null {
+export function guardRoute(pathname: string, ctx: GateContext): string | null {
   const gate = ROUTE_GATES.find((g) => pathname.startsWith(g.prefix));
   if (!gate) return null;
-  if (atLeast(state, gate.min)) return null;
-  return homeRouteFor(state);
+  if (!atLeast(ctx.journey, gate.min)) return homeRouteFor(ctx.journey);
+  if (gate.extra && !gate.extra(ctx)) return "/app/integrations";
+  return null;
 }
 
 /* ── Progress tracker (spec §4): 6 top-level phases ── */

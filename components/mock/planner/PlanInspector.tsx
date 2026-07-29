@@ -11,8 +11,8 @@ import { ArrowDown, Check, Plug, Settings2, ShieldCheck, TriangleAlert } from "l
 import StatusBadge from "@/components/mock/ui/StatusBadge";
 import { AGENT_LIBRARY, PLAN_OUTCOMES } from "@/lib/mock/fixtures/agent-library";
 import { INTEGRATIONS } from "@/lib/mock/fixtures/integrations";
-import { money, planTotals } from "@/lib/mock/pricing";
-import { useDemoStore } from "@/lib/mock/store";
+import { money } from "@/lib/mock/pricing";
+import { useDemoStore, usePlanTotals } from "@/lib/mock/store";
 import { toast } from "@/components/mock/ui/Toaster";
 import type { AgentWorkflowDef } from "@/lib/mock/types";
 import { TriggerGlyph } from "./AgentPlanCard";
@@ -267,7 +267,7 @@ function EdgeDetail({ fromId, toId }: { fromId: string; toId: string }) {
 
 function PlanSummary() {
   const plan = useDemoStore((s) => s.plan);
-  const totals = planTotals(plan.agents);
+  const totals = usePlanTotals();
   const wfTotal = plan.agents.reduce((n, a) => n + a.workflowOrder.length, 0);
   const wfEnabled = plan.agents.reduce(
     (n, a) => n + a.workflowOrder.filter((id) => a.config.workflowsEnabled[id] ?? true).length,
@@ -321,10 +321,11 @@ function PlanSummary() {
       </div>
 
       <div className={styles.insPanel}>
-        <p className={styles.insPanelTitle}>Illustrative pricing</p>
+        <p className={styles.insPanelTitle}>{totals.isReal ? "Pricing" : "Illustrative pricing"}</p>
         <p className={styles.insPanelBody}>
-          {money(totals.setup)} setup · {money(totals.monthly)}/mo. Estimates on demo data, with no
-          guaranteed savings.
+          {totals.isReal
+            ? `${money(totals.setup)} setup (measured) · ${money(totals.monthly)}/mo (projected from your process volume).`
+            : `${money(totals.setup)} setup · ${money(totals.monthly)}/mo. Estimates on demo data, with no guaranteed savings.`}
         </p>
       </div>
     </>

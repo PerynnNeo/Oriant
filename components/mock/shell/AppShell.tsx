@@ -29,6 +29,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const journey = useDemoStore((s) => s.journey);
+  const hasVisitedIntegrations = useDemoStore((s) => s.hasVisitedIntegrations);
   const presentation = useAutopilot((s) => s.presentation);
   const pathname = usePathname();
   const router = useRouter();
@@ -38,9 +39,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   /* Route guard: forward deep links redirect to the current step (spec §5). */
   useEffect(() => {
     if (!mounted) return;
-    const redirect = guardRoute(pathname, journey);
+    const redirect = guardRoute(pathname, { journey, hasVisitedIntegrations });
     if (redirect && redirect !== pathname) router.replace(redirect);
-  }, [mounted, pathname, journey, router]);
+  }, [mounted, pathname, journey, hasVisitedIntegrations, router]);
 
   /* ⌘K / Ctrl+K opens the universal command palette (spec §19.1). */
   useEffect(() => {

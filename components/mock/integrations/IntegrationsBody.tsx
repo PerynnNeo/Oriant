@@ -9,10 +9,12 @@
  * and the 4-step mock connection wizard. All content is fixture-driven;
  * connection state lives in the demo store.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Cable, Search } from "lucide-react";
 import { useDemoStore } from "@/lib/mock/store";
+import { toast } from "@/components/mock/ui/Toaster";
 import { INTEGRATIONS, INTEGRATION_TAB_ORDER } from "@/lib/mock/fixtures/integrations";
 import { RECOMMENDED_APP_IDS } from "@/lib/mock/fixtures/ids";
 import type { IntegrationDef, IntegrationStatus } from "@/lib/mock/types";
@@ -28,10 +30,12 @@ import ManageDrawer from "./ManageDrawer";
 import styles from "./integrations.module.css";
 
 /** Canonical def order: the 7 plan apps first, then fixture insertion order. */
-const ALL_DEFS: IntegrationDef[] = [
-  ...RECOMMENDED_APP_IDS.map((id) => INTEGRATIONS[id]),
-  ...Object.values(INTEGRATIONS).filter((d) => !RECOMMENDED_APP_IDS.includes(d.id)),
-].filter(Boolean);
+function buildAllDefs(): IntegrationDef[] {
+  return [
+    ...RECOMMENDED_APP_IDS.map((id) => INTEGRATIONS[id]),
+    ...Object.values(INTEGRATIONS).filter((d) => !RECOMMENDED_APP_IDS.includes(d.id)),
+  ].filter(Boolean);
+}
 
 export default function IntegrationsBody() {
   const [tab, setTab] = useState<string>(INTEGRATION_TAB_ORDER[0].id);
@@ -40,7 +44,43 @@ export default function IntegrationsBody() {
   const [manageId, setManageId] = useState<string | null>(null);
 
   const integrations = useDemoStore((s) => s.integrations);
+  const hydrateIntegrations = useDemoStore((s) => s.hydrateIntegrations);
+  const markIntegrationsVisited = useDemoStore((s) => s.markIntegrationsVisited);
   const reduced = useReducedMotion();
+
+  useEffect(() => {
+    void hydrateIntegrations();
+    markIntegrationsVisited();
+  }, [hydrateIntegrations, markIntegrationsVisited]);
+
+  /* Return trip from the real Gmail OAuth callback (item 6) — confirm, then
+     clean the URL and refresh so the card reflects the new connected status. */
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const gmailResult = searchParams.get("gmail");
+    if (!gmailResult) return;
+    if (gmailResult === "connected") {
+      toast({ title: "Gmail connected", detail: "Real sign-in complete.", tone: "ok" });
+      void hydrateIntegrations();
+    } else {
+      toast({
+        title: "Gmail connection failed",
+        detail: searchParams.get("detail") ?? "Something went wrong during sign-in.",
+        tone: "info",
+      });
+    }
+    router.replace("/app/integrations");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // INTEGRATIONS is a plain object that hydrateIntegrations() merges real,
+  // server-sourced entries into at runtime (see lib/mock/store.ts) — recompute
+  // whenever `integrations` (the runtime status map) changes so newly merged
+  // ids that weren't in the static fixture are picked up. `integrations` is
+  // used only as a recompute trigger here, not read inside buildAllDefs().
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ALL_DEFS = useMemo(() => buildAllDefs(), [integrations]);
 
   const statusOf = (def: IntegrationDef): IntegrationStatus =>
     integrations[def.id]?.status ?? def.defaultStatus;
@@ -67,13 +107,13 @@ export default function IntegrationsBody() {
   );
   const connectedDefs = useMemo(
     () => ALL_DEFS.filter((def) => (integrations[def.id]?.status ?? def.defaultStatus) === "connected"),
-    [integrations],
+    [ALL_DEFS, integrations],
   );
   const availableDefs = useMemo(
     () => ALL_DEFS.filter((def) => def.kind === "app" && !RECOMMENDED_APP_IDS.includes(def.id)),
-    [],
+    [ALL_DEFS],
   );
-  const mcpDefs = useMemo(() => ALL_DEFS.filter((def) => def.kind === "mcp"), []);
+  const mcpDefs = useMemo(() => ALL_DEFS.filter((def) => def.kind === "mcp"), [ALL_DEFS]);
 
   const counts: Record<string, number> = {
     recommended: recommendedDefs.length,

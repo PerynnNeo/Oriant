@@ -50,6 +50,7 @@ export default function PlannerControls({
   canRedo,
   setup,
   monthly,
+  isRealCost = false,
   unresolved,
   onUndo,
   onRedo,
@@ -64,6 +65,11 @@ export default function PlannerControls({
   canRedo: boolean;
   setup: number;
   monthly: number;
+  /** True once the plan carries a real costSummary (item 7) — setup is
+   *  measured from real OpenAI token usage, monthly is a projection from
+   *  blueprint volume data. False for the local demo fixture, where both
+   *  numbers are the static illustrative lookup table. */
+  isRealCost?: boolean;
   /** Count of unresolved readiness items (planBlockers). */
   unresolved: number;
   onUndo: () => void;
@@ -154,7 +160,9 @@ export default function PlannerControls({
           <AnimatedMoney value={monthly} suffix="/mo" />
           <span className={styles.costLabel}>Monthly</span>
         </div>
-        <span className={styles.costNote}>Illustrative pricing</span>
+        <span className={styles.costNote}>
+          {isRealCost ? "Setup measured · monthly projected" : "Illustrative pricing"}
+        </span>
       </div>
     </div>
   );

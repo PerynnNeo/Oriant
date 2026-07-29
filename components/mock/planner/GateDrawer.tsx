@@ -11,11 +11,13 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, CircleCheckBig, Plug, Settings2, ShieldCheck, TriangleAlert } from "lucide-react";
 import Drawer from "@/components/mock/ui/Drawer";
 import StatusBadge from "@/components/mock/ui/StatusBadge";
-import { planBlockers, useDemoStore } from "@/lib/mock/store";
+import { planBlockers, useDemoStore, usePlanTotals } from "@/lib/mock/store";
 import { AGENT_LIBRARY } from "@/lib/mock/fixtures/agent-library";
 import { INTEGRATIONS } from "@/lib/mock/fixtures/integrations";
-import { money, planTotals } from "@/lib/mock/pricing";
+import { money } from "@/lib/mock/pricing";
 import { toast } from "@/components/mock/ui/Toaster";
+import type { PlanCostSummary } from "@/lib/server/b/types";
+import type { WorkforcePlanState } from "@/lib/mock/types";
 import styles from "./planner.module.css";
 
 export default function GateDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -25,7 +27,8 @@ export default function GateDrawer({ open, onClose }: { open: boolean; onClose: 
 
   const blockers = planBlockers(plan.agents);
   const ready = blockers.length === 0;
-  const totals = planTotals(plan.agents);
+  const totals = usePlanTotals();
+  const costSummary = (plan as WorkforcePlanState & { costSummary?: PlanCostSummary }).costSummary;
 
   const integrationIds: string[] = [];
   for (const a of plan.agents) {
@@ -174,26 +177,33 @@ export default function GateDrawer({ open, onClose }: { open: boolean; onClose: 
       </div>
 
       <div className={styles.gateSection}>
-        <p className="oa-micro">Illustrative cost</p>
+        <p className="oa-micro">{totals.isReal ? "Cost" : "Illustrative cost"}</p>
         {plan.agents.map((a) => {
           const def = AGENT_LIBRARY[a.agentId];
           if (!def) return null;
+          const real = costSummary?.perAgent[a.agentId];
+          const setup = real ? real.realSetupCostUsd : def.setupCost;
+          const monthly = real ? real.monthlyProjectedCostUsd : def.monthlyCost;
           return (
             <p key={a.agentId} className={styles.gateCostRow} style={{ margin: 0 }}>
               <span>{def.name}</span>
               <span>
-                {money(def.setupCost)} setup · {money(def.monthlyCost)}/mo
+                {money(setup)} setup · {money(monthly)}/mo{real ? " (projected)" : ""}
               </span>
             </p>
           );
         })}
         <p className={`${styles.gateCostRow} ${styles.gateCostTotal}`} style={{ margin: 0 }}>
-          <span>Illustrative total</span>
+          <span>{totals.isReal ? "Total" : "Illustrative total"}</span>
           <span>
             {money(totals.setup)} setup · {money(totals.monthly)}/mo
           </span>
         </p>
-        <p className={styles.gateNote}>Demo pricing: no charges, no guaranteed savings.</p>
+        <p className={styles.gateNote}>
+          {totals.isReal
+            ? "Setup is measured from real generation usage. Monthly is a projection from your process volume, not a bill."
+            : "Demo pricing: no charges, no guaranteed savings."}
+        </p>
       </div>
 
       <div className={styles.gateSection}>

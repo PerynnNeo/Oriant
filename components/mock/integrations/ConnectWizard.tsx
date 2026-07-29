@@ -7,10 +7,10 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Check, Loader2, ShieldCheck } from "lucide-react";
+import { Check, ExternalLink, Loader2, ShieldCheck } from "lucide-react";
 import Drawer from "@/components/mock/ui/Drawer";
 import { toast } from "@/components/mock/ui/Toaster";
-import { useDemoStore } from "@/lib/mock/store";
+import { getIntegrationRowId, useDemoStore } from "@/lib/mock/store";
 import { mockConnectionService } from "@/lib/mock/services";
 import type { TimelineHandle } from "@/lib/mock/services/timeline";
 import type { IntegrationDef } from "@/lib/mock/types";
@@ -44,6 +44,35 @@ export default function ConnectWizard({
   const [phase, setPhase] = useState<Phase>("review");
   const [reached, setReached] = useState(0);
   const handleRef = useRef<TimelineHandle | null>(null);
+
+  /* Real Gmail OAuth (item 6): only offered when the server has Google OAuth
+     configured AND this session has a real integration_manifests row for it
+     -- otherwise this stays the honest simulated wizard below, unchanged. */
+  const [gmailOAuthReady, setGmailOAuthReady] = useState(false);
+  useEffect(() => {
+    if (defId !== "gmail") {
+      setGmailOAuthReady(false);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/integrations/gmail/status")
+      .then((r) => r.json())
+      .then((res: { configured?: boolean }) => {
+        if (!cancelled) setGmailOAuthReady(!!res.configured && !!getIntegrationRowId("gmail"));
+      })
+      .catch(() => {
+        if (!cancelled) setGmailOAuthReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [defId]);
+
+  const startRealGmailOAuth = () => {
+    const rowId = getIntegrationRowId("gmail");
+    if (!rowId) return;
+    window.location.href = `/api/integrations/gmail/connect?integrationManifestId=${encodeURIComponent(rowId)}`;
+  };
 
   /* Fresh state whenever a (new) tool opens; cancel any in-flight run on
      close and on unmount — no stale updates, ever. */
@@ -184,6 +213,16 @@ export default function ConnectWizard({
           <button type="button" className="oa-btn oa-btn--primary" onClick={onClose}>
             Done
           </button>
+        ) : gmailOAuthReady ? (
+          <>
+            <button type="button" className="oa-btn oa-btn--ghost" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="oa-btn oa-btn--primary" onClick={startRealGmailOAuth}>
+              Continue with Google
+              <ExternalLink size={14} aria-hidden />
+            </button>
+          </>
         ) : (
           <>
             <button type="button" className="oa-btn oa-btn--ghost" onClick={onClose}>
@@ -208,29 +247,51 @@ export default function ConnectWizard({
         )
       }
     >
-      {/* Streaming status region: step changes are announced politely. */}
-      <div className={styles.wizSteps} aria-live="polite">
-        {STEP_ORDER.map((stepId, i) => {
-          const state = stateOf(i);
-          return (
-            <div key={stepId} className={styles.wizStep} data-state={state}>
-              <span className={styles.wizBullet} aria-hidden>
-                {state === "done" ? <Check size={14} /> : i + 1}
-              </span>
-              <div className={styles.wizBody}>
-                <p className={styles.wizTitle}>
-                  {STEP_TITLES[i]}
-                  {state === "done" && <span className="oa-sub" style={{ marginLeft: 8 }}>Done</span>}
-                </p>
-                {stepBodies[i]}
+      {gmailOAuthReady ? (
+        <div className={styles.manageStack}>
+          <ul className={styles.wizPermList}>
+            {def.permissionSummary.map((line) => (
+              <li key={line} className={styles.wizPermItem}>
+                <Check size={14} aria-hidden />
+                {line}
+              </li>
+            ))}
+          </ul>
+          <div className={styles.ownerLine}>
+            <ShieldCheck size={15} aria-hidden />
+            <span>
+              You&apos;ll sign in with your real Google account on Google&apos;s own page. Oriant never
+              sees your password, and the token is stored encrypted.
+            </span>
+          </div>
+        </div>
+      ) : (
+        /* Streaming status region: step changes are announced politely. */
+        <div className={styles.wizSteps} aria-live="polite">
+          {STEP_ORDER.map((stepId, i) => {
+            const state = stateOf(i);
+            return (
+              <div key={stepId} className={styles.wizStep} data-state={state}>
+                <span className={styles.wizBullet} aria-hidden>
+                  {state === "done" ? <Check size={14} /> : i + 1}
+                </span>
+                <div className={styles.wizBody}>
+                  <p className={styles.wizTitle}>
+                    {STEP_TITLES[i]}
+                    {state === "done" && <span className="oa-sub" style={{ marginLeft: 8 }}>Done</span>}
+                  </p>
+                  {stepBodies[i]}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       <p className="oa-sim-note" style={{ marginTop: 6 }}>
-        This is a simulated connection; no account is accessed.
+        {gmailOAuthReady
+          ? "Real Google sign-in — you can disconnect at any time from Manage."
+          : "This is a simulated connection; no account is accessed."}
       </p>
     </Drawer>
   );

@@ -39,6 +39,7 @@ import PlanCanvas from "./PlanCanvas";
 import PlanList from "./PlanList";
 import PlanInspector from "./PlanInspector";
 import CommandBar from "./CommandBar";
+import RefinementChat from "./RefinementChat";
 import GateDrawer from "./GateDrawer";
 import { useMinWidth, type PlannerSelection } from "./planner-utils";
 import styles from "./planner.module.css";
@@ -48,6 +49,7 @@ type CanvasView = "canvas" | "list";
 export default function PlannerExperience() {
   const journey = useDemoStore((s) => s.journey);
   const plan = useDemoStore((s) => s.plan);
+  const planId = useDemoStore((s) => s.planId);
   const reportVersion = useDemoStore((s) => s.report.version);
   const canUndo = useDemoStore((s) => s.planPast.length > 0);
   const canRedo = useDemoStore((s) => s.planFuture.length > 0);
@@ -89,9 +91,9 @@ export default function PlannerExperience() {
       { instant: Boolean(reduced) },
     );
     genHandle.current = handle;
-    void handle.done.then((finished) => {
+    void handle.done.then(async (finished) => {
       if (!finished) return;
-      useDemoStore.getState().setPlanGenerated();
+      await useDemoStore.getState().setPlanGenerated();
       setGenerating(false);
     });
   }, [reduced]);
@@ -99,8 +101,7 @@ export default function PlannerExperience() {
   const skipGeneration = useCallback(() => {
     genHandle.current?.cancel();
     setStagesDone(PLANNER_STAGES.length);
-    useDemoStore.getState().setPlanGenerated();
-    setGenerating(false);
+    void useDemoStore.getState().setPlanGenerated().then(() => setGenerating(false));
   }, []);
 
   /* Auto-run on first arrival: fresh from the approved report, or a deep
@@ -227,6 +228,7 @@ export default function PlannerExperience() {
               canRedo={canRedo}
               setup={totals.setup}
               monthly={totals.monthly}
+              isRealCost={totals.isReal}
               unresolved={unresolved}
               onUndo={() => useDemoStore.getState().undoPlan()}
               onRedo={() => useDemoStore.getState().redoPlan()}
@@ -276,7 +278,7 @@ export default function PlannerExperience() {
                   <PlanList selection={selection} onSelect={setSelection} approved={approved} />
                 )}
 
-                {!approved && <CommandBar />}
+                {planId ? <RefinementChat approved={approved} /> : !approved && <CommandBar />}
               </section>
 
               <aside className={styles.inspectorCol} aria-label="Plan inspector">

@@ -16,6 +16,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import type {
   AgentConfig,
+  AgentDef,
   AgentDesignAnswers,
   AgentWorkflowDef,
   ApprovalItem,
@@ -25,6 +26,7 @@ import type {
   CustomTool,
   DemoState,
   DiscoveryMode,
+  IntegrationDef,
   IntegrationRuntime,
   IntegrationStatus,
   JourneyState,
@@ -38,6 +40,7 @@ import type {
 } from "./types";
 import { cancelAllMockWork } from "./services";
 import { planTotals } from "./pricing";
+import type { PlanCostSummary } from "@/lib/server/b/types";
 import { atLeast } from "./state-machine";
 import { AGENT, DEMO_TODAY } from "./fixtures/ids";
 import { DEMO_COMPANY, DEMO_INTRO_ANSWER } from "./fixtures/demo-company";
@@ -96,6 +99,65 @@ function initialIntegrations(): Record<string, IntegrationRuntime> {
     out[def.id] = { status: def.defaultStatus, connectedAt: null };
   }
   return out;
+}
+
+/**
+ * AGENT_LIBRARY / INTEGRATIONS are plain module-level objects imported by
+ * many components directly. Real, server-generated entries (Tier-2 custom
+ * agents; integration manifests for tools not in the static fixture) are
+ * merged into them in place at runtime, so every existing component that
+ * reads AGENT_LIBRARY[id] / INTEGRATIONS[id] picks up real data with zero
+ * component changes.
+ */
+function mergeAgentTemplates(templates?: Record<string, AgentDef>) {
+  if (templates) Object.assign(AGENT_LIBRARY, templates);
+}
+
+function mergeIntegrationDefs(defs?: Record<string, IntegrationDef>) {
+  if (defs) Object.assign(INTEGRATIONS, defs);
+}
+
+/** Matches the slug() helper in lib/server/b/planner.ts / executor.ts so a
+ *  system_name like "Google Calendar" round-trips to the same id used by
+ *  the static APP.* fixture ids (e.g. "google-calendar"). */
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+/** slug -> integration_manifests.id (DB uuid), populated by hydrateIntegrations. */
+const integrationRowIdBySlug: Record<string, string> = {};
+
+/** The real integration_manifests row id for a slug, if this session has hydrated
+ *  one (used to kick off real OAuth against the right row — item 6). */
+export function getIntegrationRowId(slug: string): string | undefined {
+  return integrationRowIdBySlug[slug];
+}
+
+/** integration_manifests.connection_status uses the Blueprint's own vocabulary
+ *  (a DB check constraint enforces exactly these 4 values) — not the frontend's
+ *  IntegrationStatus. The PATCH route (app/api/integration-manifests/[id])
+ *  converts the other direction. */
+function fromDbStatus(s: "connected" | "requested" | "not_requested" | "unavailable"): IntegrationStatus {
+  switch (s) {
+    case "connected":
+      return "connected";
+    case "requested":
+      return "required";
+    case "unavailable":
+      return "needs_approval";
+    default:
+      return "optional";
+  }
+}
+
+function syncIntegrationStatus(slug: string, status: IntegrationStatus) {
+  const rowId = integrationRowIdBySlug[slug];
+  if (!rowId) return; // no server-backed row for this id (pure local/demo entry)
+  fetch(`/api/integration-manifests/${rowId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connectionStatus: status }),
+  }).catch((err) => console.error("[oriant] integration status sync failed:", err));
 }
 
 function initialState(): DemoState {
@@ -179,6 +241,13 @@ export interface DemoActions {
   /* plan undo/redo (kept outside DemoState; rebuilt from history stack) */
   planPast: WorkforcePlanState[];
   planFuture: WorkforcePlanState[];
+  /** workforce_plans.id for the real, server-generated plan (if any). */
+  planId: string | null;
+  /** Fetch integration_manifests and merge into the runtime state + INTEGRATIONS. */
+  hydrateIntegrations: () => Promise<void>;
+  /** Has the owner opened /app/integrations this plan cycle (item 5's Build gate). */
+  hasVisitedIntegrations: boolean;
+  markIntegrationsVisited: () => void;
 
   /* global */
   setJourney: (j: JourneyState) => void;
@@ -228,7 +297,7 @@ export interface DemoActions {
   approveReport: () => void;
 
   /* planner */
-  setPlanGenerated: () => void;
+  setPlanGenerated: () => Promise<void>;
   addAgentToPlan: (agentId: string) => void;
   removeAgentFromPlan: (agentId: string) => void;
   reorderPlanAgents: (orderedAgentIds: string[]) => void;
@@ -242,7 +311,7 @@ export interface DemoActions {
   applyNlCommand: (cmd: NlCommandFixture) => void;
   undoPlan: () => void;
   redoPlan: () => void;
-  approvePlan: () => void;
+  approvePlan: () => Promise<void>;
 
   /* integrations */
   setIntegrationStatus: (id: string, status: IntegrationStatus) => void;
@@ -290,13 +359,15 @@ export const useDemoStore = create<DemoStore>()(
       _hydrated: false,
       planPast: [],
       planFuture: [],
+      planId: null,
+      hasVisitedIntegrations: false,
 
       /* ── global ── */
       setJourney: (j) => set({ journey: j }),
 
       resetDemo: () => {
         cancelAllMockWork();
-        set({ ...initialState(), planPast: [], planFuture: [] });
+        set({ ...initialState(), planPast: [], planFuture: [], planId: null, hasVisitedIntegrations: false });
       },
 
       fastForwardTo: (target) => {
@@ -688,13 +759,46 @@ export const useDemoStore = create<DemoStore>()(
         })),
 
       /* ── planner ── */
-      setPlanGenerated: () =>
-        set((st) => ({
-          plan: st.plan.agents.length
-            ? { ...st.plan, stale: false }
-            : { ...st.plan, agents: structuredClone(INITIAL_PLAN_AGENTS), stale: false },
-          journey: atLeast(st.journey, "plan_review") ? st.journey : "plan_review",
-        })),
+      setPlanGenerated: async () => {
+        try {
+          const latest = (await fetch("/api/workforce-plan/latest").then((r) => r.json())) as {
+            plan?: { id: string; plan: WorkforcePlanState & { customAgentTemplates?: Record<string, AgentDef> } } | null;
+          };
+          let row = latest?.plan ?? null;
+          if (!row) {
+            const generated = (await fetch("/api/workforce-plan/generate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            }).then((r) => r.json())) as {
+              plan?: { id: string; plan: WorkforcePlanState & { customAgentTemplates?: Record<string, AgentDef> } };
+            };
+            row = generated?.plan ?? null;
+          }
+          if (!row?.plan) throw new Error("No workforce plan returned by the server");
+
+          mergeAgentTemplates(row.plan.customAgentTemplates);
+          // A plan fetched from the server may already be approved (e.g. a
+          // previous session approved it) — advance the journey to match,
+          // not just to "plan_review", or later route gates (e.g. /app/build
+          // requires "plan_approved") stay locked despite the plan showing
+          // as approved.
+          const minJourney = row.plan.status === "approved" ? "plan_approved" : "plan_review";
+          set((st) => ({
+            plan: row!.plan,
+            planId: row!.id,
+            journey: atLeast(st.journey, minJourney) ? st.journey : minJourney,
+          }));
+        } catch (err) {
+          console.error("[oriant] real plan unavailable, using local demo fixture:", err);
+          set((st) => ({
+            plan: st.plan.agents.length
+              ? { ...st.plan, stale: false }
+              : { ...st.plan, agents: structuredClone(INITIAL_PLAN_AGENTS), stale: false },
+            journey: atLeast(st.journey, "plan_review") ? st.journey : "plan_review",
+          }));
+        }
+      },
 
       addAgentToPlan: (agentId) =>
         set((st) => {
@@ -952,7 +1056,14 @@ export const useDemoStore = create<DemoStore>()(
           };
         }),
 
-      approvePlan: () =>
+      approvePlan: async () => {
+        const planId = get().planId;
+        // Flush any pending/in-flight autosave BEFORE flipping local status to
+        // "approved" -- once plan.status is "approved" locally, flushAutosave()
+        // refuses to write (approved plans are immutable), so any edit still
+        // sitting in the debounce window would otherwise never reach the DB
+        // the /approve route reads from.
+        await flushPendingAutosave();
         set((st) => ({
           plan: {
             ...st.plan,
@@ -962,23 +1073,87 @@ export const useDemoStore = create<DemoStore>()(
             stale: false,
           },
           journey: atLeast(st.journey, "plan_approved") ? st.journey : "plan_approved",
-        })),
+        }));
+        if (!planId) return;
+        // Fire-and-forget: the optimistic update above already reflects
+        // approval immediately; reconcile with the server (which also runs
+        // the Executor Agent) once it responds.
+        fetch(`/api/workforce-plan/${planId}/approve`, { method: "POST" })
+          .then((r) => r.json())
+          .then((res: { plan?: { plan: WorkforcePlanState } }) => {
+            if (res?.plan?.plan) set({ plan: res.plan.plan });
+          })
+          .catch((err) => console.error("[oriant] plan approval sync failed:", err));
+      },
 
       /* ── integrations ── */
-      setIntegrationStatus: (id, status) =>
+      setIntegrationStatus: (id, status) => {
         set((st) => ({
           integrations: {
             ...st.integrations,
             [id]: { ...(st.integrations[id] ?? { connectedAt: null }), status },
           },
-        })),
-      markConnected: (id) =>
+        }));
+        syncIntegrationStatus(id, status);
+      },
+      markConnected: (id) => {
         set((st) => ({
           integrations: {
             ...st.integrations,
             [id]: { status: "connected", connectedAt: `${DEMO_TODAY}T10:15:00+08:00` },
           },
-        })),
+        }));
+        syncIntegrationStatus(id, "connected");
+      },
+
+      hydrateIntegrations: async () => {
+        try {
+          type DbConnectionStatus = "connected" | "requested" | "not_requested" | "unavailable";
+          const res = (await fetch("/api/integration-manifests").then((r) => r.json())) as {
+            integrationManifests?: Array<{
+              id: string;
+              system_name: string;
+              category: string;
+              connection_status: DbConnectionStatus;
+              config: Omit<IntegrationDef, "id" | "name" | "category" | "kind" | "defaultStatus" | "account">;
+            }>;
+          };
+          const rows = res.integrationManifests ?? [];
+          if (!rows.length) return;
+
+          const defs: Record<string, IntegrationDef> = {};
+          const runtimes: Record<string, IntegrationRuntime> = {};
+          for (const row of rows) {
+            const id = slugify(row.system_name);
+            integrationRowIdBySlug[id] = row.id;
+            const status = fromDbStatus(row.connection_status);
+            defs[id] = {
+              id,
+              name: row.system_name,
+              category: row.category,
+              kind: "app",
+              purpose: row.config.purpose,
+              neededBy: row.config.neededBy,
+              reads: row.config.reads,
+              actions: row.config.actions,
+              defaultStatus: status,
+              advanced: row.config.advanced,
+              permissionSummary: row.config.permissionSummary,
+              account: "",
+            };
+            runtimes[id] = {
+              status,
+              connectedAt: status === "connected" ? new Date().toISOString() : null,
+            };
+          }
+          mergeIntegrationDefs(defs);
+          set((st) => ({ integrations: { ...st.integrations, ...runtimes } }));
+        } catch (err) {
+          console.error("[oriant] integration manifests unavailable, using local demo fixture:", err);
+        }
+      },
+
+      markIntegrationsVisited: () => set({ hasVisitedIntegrations: true }),
 
       /* ── build ── */
       startBuilds: () =>
@@ -1199,16 +1374,95 @@ export const useDemoStore = create<DemoStore>()(
       },
       migrate: () => ({ ...initialState(), planPast: [], planFuture: [] }) as Partial<DemoStore>,
       onRehydrateStorage: () => (state) => {
-        if (state) (state as DemoStore)._hydrated = true;
+        if (state) {
+          (state as DemoStore)._hydrated = true;
+          // A refreshed page re-imports lib/mock/fixtures/agent-library.ts from
+          // scratch, losing any custom-agent templates merged in at runtime —
+          // re-merge them from the persisted plan (see mergeAgentTemplates above).
+          const plan = state.plan as WorkforcePlanState & { customAgentTemplates?: Record<string, AgentDef> };
+          mergeAgentTemplates(plan?.customAgentTemplates);
+        }
       },
     },
   ),
 );
 
-/** Selector: plan cost totals (illustrative). useShallow caches the derived
- *  object so the snapshot stays referentially stable between renders. */
-export function usePlanTotals() {
-  return useDemoStore(useShallow((s) => planTotals(s.plan.agents)));
+/**
+ * Autosave (items 1/3/4): every action that produces a new `plan` object
+ * (config edits, design-call answers, workflow reordering, NL refinements,
+ * undo/redo, ...) flows through `set()`, which always creates a fresh
+ * `plan` reference — so subscribing to that one field, instead of adding a
+ * save call to every individual action, catches all of them by
+ * construction. Debounced so rapid edits (typing, dragging) collapse into
+ * one PATCH; skipped for approved plans (immutable — see the PATCH route)
+ * and before hydration finishes (avoid saving a stale first-paint value).
+ */
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let autosaveInFlight: Promise<void> | null = null;
+
+async function flushAutosave(): Promise<void> {
+  const { planId, plan } = useDemoStore.getState();
+  if (!planId || plan.status === "approved") return;
+  const run = fetch(`/api/workforce-plan/${planId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan }),
+  })
+    .then(() => undefined)
+    .catch((err) => console.error("[oriant] autosave failed:", err));
+  autosaveInFlight = run;
+  await run;
+  if (autosaveInFlight === run) autosaveInFlight = null;
+}
+
+function scheduleAutosave() {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null;
+    void flushAutosave();
+  }, 800);
+}
+
+/** Await any pending/in-flight autosave — call before approving so the
+ *  server has the browser's latest edits, not a stale debounce window. */
+export async function flushPendingAutosave(): Promise<void> {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    await flushAutosave();
+  } else if (autosaveInFlight) {
+    await autosaveInFlight;
+  }
+}
+
+useDemoStore.subscribe((state, prevState) => {
+  if (state._hydrated && state.plan !== prevState.plan) scheduleAutosave();
+});
+
+/**
+ * Selector: plan cost totals. When the plan carries a real `costSummary`
+ * (item 7 — set by the Planner/Executor from actual OpenAI token usage),
+ * `setup` is a real measured figure and `monthly` is a projection from the
+ * blueprint's own process volume (never a measurement — no agent has run
+ * yet). `isReal: false` means costSummary is absent (e.g. the local demo
+ * fixture via "fast-forward"), so this falls back to the static illustrative
+ * lookup table. useShallow caches the derived object so the snapshot stays
+ * referentially stable between renders.
+ */
+export function usePlanTotals(): { setup: number; monthly: number; isReal: boolean } {
+  return useDemoStore(
+    useShallow((s) => {
+      const plan = s.plan as WorkforcePlanState & { costSummary?: PlanCostSummary };
+      if (plan.costSummary) {
+        return {
+          setup: plan.costSummary.totalRealSetupCostUsd,
+          monthly: plan.costSummary.totalMonthlyProjectedCostUsd,
+          isReal: true,
+        };
+      }
+      return { ...planTotals(s.plan.agents), isReal: false };
+    }),
+  );
 }
 
 /** Blockers preventing plan approval (spec §13). */

@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/role-b-to-role-c-handoff-1.0.json",
+  "title": "Role B to Role C Handoff — four related table row shapes",
+  "description": "Validates one row from workforce_plans, agent_configs, workflow_definitions, or integration_manifests. Pick the matching $defs entry for the table you're validating.",
+  "$defs": {
+    "AgentConfig": {
+      "type": "object",
+      "required": ["operatingMode", "triggers", "channels", "workflowsEnabled", "approvalActions", "processOwner", "approvalOwner", "quietHours", "runFrequency", "dataAccess", "forbiddenActions"],
+      "properties": {
+        "operatingMode": { "enum": ["draft_only", "act_after_approval", "auto_within_limits"] },
+        "triggers": { "type": "array", "items": { "enum": ["event", "schedule", "threshold", "manual", "dependency", "approval"] } },
+        "triggerDetails": { "type": "object", "additionalProperties": { "type": "string" } },
+        "channels": { "type": "array", "items": { "type": "string" } },
+        "workflowsEnabled": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "approvalActions": { "type": "array", "items": { "type": "string" } },
+        "processOwner": { "type": "string" },
+        "approvalOwner": { "type": "string" },
+        "quietHours": { "type": "string" },
+        "runFrequency": { "type": "string" },
+        "dataAccess": { "type": "array", "items": { "type": "string" } },
+        "forbiddenActions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AgentWorkflowDef": {
+      "type": "object",
+      "required": ["id", "name", "description", "trigger", "steps", "handoff", "onFailure", "humanApprovals"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "trigger": {
+          "type": "object",
+          "required": ["kind", "label"],
+          "properties": {
+            "kind": { "enum": ["event", "schedule", "threshold", "manual", "dependency", "approval"] },
+            "label": { "type": "string" }
+          }
+        },
+        "steps": { "type": "array", "items": { "type": "string" } },
+        "handoff": { "type": "string" },
+        "onFailure": { "type": "string" },
+        "humanApprovals": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AgentDesignAnswers": {
+      "type": "object",
+      "required": ["objective", "trigger", "inputs", "decisions", "permittedActions", "escalation", "systems", "successCriteria"],
+      "properties": {
+        "objective": { "type": "string" },
+        "trigger": { "type": "string" },
+        "inputs": { "type": "string" },
+        "decisions": { "type": "string" },
+        "permittedActions": { "type": "string" },
+        "escalation": { "type": "string" },
+        "systems": { "type": "string" },
+        "successCriteria": { "type": "string" }
+      }
+    },
+    "DiscoveryQuestion": {
+      "type": "object",
+      "required": ["id", "question", "reason", "answer", "factIds", "sections"],
+      "properties": {
+        "id": { "type": "string" },
+        "question": { "type": "string" },
+        "reason": { "type": "string" },
+        "answer": { "type": "string" },
+        "factIds": { "type": "array", "items": { "type": "string" } },
+        "sections": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AgentDef": {
+      "type": "object",
+      "required": ["id", "name", "source", "role", "description", "fitScore", "fitReason", "coveredOutcomes", "workflows", "integrations", "autonomyNote", "humanApprovals", "setupCost", "monthlyCost", "defaultConfig"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "source": { "enum": ["preset", "custom"] },
+        "role": { "type": "string" },
+        "description": { "type": "string" },
+        "fitScore": { "type": "number" },
+        "fitReason": { "type": "string" },
+        "coveredOutcomes": { "type": "array", "items": { "type": "string" } },
+        "workflows": { "type": "array", "items": { "$ref": "#/$defs/AgentWorkflowDef" } },
+        "integrations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["integrationId", "purpose"],
+            "properties": { "integrationId": { "type": "string" }, "purpose": { "type": "string" } }
+          }
+        },
+        "autonomyNote": { "type": "string" },
+        "humanApprovals": { "type": "array", "items": { "type": "string" } },
+        "setupCost": { "type": "number" },
+        "monthlyCost": { "type": "number" },
+        "defaultConfig": { "$ref": "#/$defs/AgentConfig" },
+        "customProposal": {
+          "type": "object",
+          "properties": {
+            "whyCustom": { "type": "string" },
+            "objective": { "type": "string" },
+            "trigger": { "type": "string" },
+            "requiredInputs": { "type": "array", "items": { "type": "string" } },
+            "teamsInvolved": { "type": "array", "items": { "type": "string" } },
+            "decisions": { "type": "array", "items": { "type": "string" } },
+            "allowedActions": { "type": "array", "items": { "type": "string" } },
+            "prohibitedActions": { "type": "array", "items": { "type": "string" } },
+            "approvalPoints": { "type": "array", "items": { "type": "string" } },
+            "missingInformation": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "designQuestions": { "type": "array", "items": { "$ref": "#/$defs/DiscoveryQuestion" } }
+      }
+    },
+    "PlanAgent": {
+      "type": "object",
+      "required": ["agentId", "status", "config", "designAnswers", "designApproved", "workflowOrder"],
+      "properties": {
+        "agentId": { "type": "string" },
+        "status": { "enum": ["recommended", "needs_information", "needs_configuration", "ready_to_build", "building", "validated", "active"] },
+        "config": { "$ref": "#/$defs/AgentConfig" },
+        "designAnswers": { "anyOf": [{ "$ref": "#/$defs/AgentDesignAnswers" }, { "type": "null" }] },
+        "designApproved": { "type": "boolean" },
+        "workflowOrder": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "AgentCostEstimate": {
+      "type": "object",
+      "required": ["realSetupTokens", "realSetupCostUsd", "monthlyProjectedTokens", "monthlyProjectedCostUsd", "coveredProcessIds"],
+      "properties": {
+        "realSetupTokens": { "type": "integer", "minimum": 0 },
+        "realSetupCostUsd": { "type": "number", "minimum": 0 },
+        "monthlyProjectedTokens": { "type": "number", "minimum": 0 },
+        "monthlyProjectedCostUsd": { "type": "number", "minimum": 0 },
+        "coveredProcessIds": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "PlanCostSummary": {
+      "type": "object",
+      "required": ["plannerTokens", "plannerCostUsd", "totalRealSetupCostUsd", "totalMonthlyProjectedCostUsd", "perAgent"],
+      "properties": {
+        "plannerTokens": { "type": "integer", "minimum": 0 },
+        "plannerCostUsd": { "type": "number", "minimum": 0 },
+        "totalRealSetupCostUsd": { "type": "number", "minimum": 0 },
+        "totalMonthlyProjectedCostUsd": { "type": "number", "minimum": 0 },
+        "perAgent": { "type": "object", "additionalProperties": { "$ref": "#/$defs/AgentCostEstimate" } }
+      }
+    },
+    "WorkforcePlanPayload": {
+      "type": "object",
+      "required": ["version", "status", "approvedAt", "stale", "agents", "planRules", "lastChange", "sourceBlueprintId", "sourceBlueprintVersion", "sourcePayloadHash", "customAgentTemplates", "costSummary"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["draft", "approved"] },
+        "approvedAt": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "stale": { "type": "boolean" },
+        "agents": { "type": "array", "items": { "$ref": "#/$defs/PlanAgent" } },
+        "planRules": { "type": "array", "items": { "type": "string" } },
+        "lastChange": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["summary", "costDelta"],
+              "properties": {
+                "summary": { "type": "string" },
+                "costDelta": {
+                  "type": "object",
+                  "required": ["setup", "monthly"],
+                  "properties": { "setup": { "type": "number" }, "monthly": { "type": "number" } }
+                }
+              }
+            },
+            { "type": "null" }
+          ]
+        },
+        "sourceBlueprintId": { "type": "string" },
+        "sourceBlueprintVersion": { "type": "integer" },
+        "sourcePayloadHash": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "customAgentTemplates": { "type": "object", "additionalProperties": { "$ref": "#/$defs/AgentDef" } },
+        "costSummary": { "$ref": "#/$defs/PlanCostSummary" }
+      }
+    },
+    "WorkforcePlanRow": {
+      "type": "object",
+      "required": ["id", "role_b_handoff_id", "organization_id", "version", "status", "plan", "approved_by", "approved_at", "created_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "role_b_handoff_id": { "type": "string", "format": "uuid" },
+        "organization_id": { "type": "string", "format": "uuid" },
+        "version": { "type": "integer", "minimum": 1 },
+        "status": { "enum": ["draft", "approved"] },
+        "plan": { "$ref": "#/$defs/WorkforcePlanPayload" },
+        "approved_by": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "approved_at": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+        "created_at": { "type": "string" }
+      }
+    },
+    "TokenUsage": {
+      "type": "object",
+      "required": ["promptTokens", "completionTokens", "totalTokens"],
+      "properties": {
+        "promptTokens": { "type": "integer", "minimum": 0 },
+        "completionTokens": { "type": "integer", "minimum": 0 },
+        "totalTokens": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "AgentConfigPayload": {
+      "allOf": [
+        { "$ref": "#/$defs/AgentConfig" },
+        {
+          "type": "object",
+          "required": ["promptTemplate", "retryPolicy", "timeoutPolicy", "tokenUsage"],
+          "properties": {
+            "promptTemplate": { "type": "string" },
+            "retryPolicy": {
+              "type": "object",
+              "required": ["maxAttempts", "backoffSeconds"],
+              "properties": { "maxAttempts": { "type": "integer" }, "backoffSeconds": { "type": "integer" } }
+            },
+            "timeoutPolicy": {
+              "type": "object",
+              "required": ["seconds"],
+              "properties": { "seconds": { "type": "integer" } }
+            },
+            "tokenUsage": { "anyOf": [{ "$ref": "#/$defs/TokenUsage" }, { "type": "null" }] }
+          }
+        }
+      ]
+    },
+    "AgentConfigRow": {
+      "type": "object",
+      "required": ["id", "workforce_plan_id", "agent_key", "config", "created_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "workforce_plan_id": { "type": "string", "format": "uuid" },
+        "agent_key": { "type": "string" },
+        "config": { "$ref": "#/$defs/AgentConfigPayload" },
+        "created_at": { "type": "string" }
+      }
+    },
+    "WorkflowDefinitionPayload": {
+      "allOf": [
+        { "$ref": "#/$defs/AgentWorkflowDef" },
+        {
+          "type": "object",
+          "required": ["dataSchema", "retryPolicy", "timeoutPolicy", "approvalPolicy", "composedBy"],
+          "properties": {
+            "dataSchema": {
+              "type": "object",
+              "required": ["input", "output"],
+              "properties": {
+                "input": { "type": "array", "items": { "type": "string" } },
+                "output": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "retryPolicy": {
+              "type": "object",
+              "required": ["maxAttempts", "backoffSeconds"],
+              "properties": { "maxAttempts": { "type": "integer" }, "backoffSeconds": { "type": "integer" } }
+            },
+            "timeoutPolicy": {
+              "type": "object",
+              "required": ["seconds"],
+              "properties": { "seconds": { "type": "integer" } }
+            },
+            "approvalPolicy": {
+              "type": "object",
+              "required": ["channel", "approverRole", "escalation"],
+              "properties": {
+                "channel": { "enum": ["telegram", "whatsapp", "dashboard"] },
+                "approverRole": { "type": "string" },
+                "escalation": { "type": "string" }
+              }
+            },
+            "composedBy": { "enum": ["openai", "fixture", "zo-computer-stub"] }
+          }
+        }
+      ]
+    },
+    "WorkflowDefinitionRow": {
+      "type": "object",
+      "required": ["id", "workforce_plan_id", "workflow_key", "definition", "created_at"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "workforce_plan_id": { "type": "string", "format": "uuid" },
+        "workflow_key": { "type": "string" },
+        "definition": { "$ref": "#/$defs/WorkflowDefinitionPayload" },
+        "created_at": { "type": "string" }
+      }
+    },
+    "IntegrationManifestConfig": {
+      "type": "object",
+      "required": ["purpose", "neededBy", "reads", "actions", "advanced", "permissionSummary"],
+      "properties": {
+        "purpose": { "type": "string" },
+        "neededBy": { "type": "array", "items": { "type": "string" } },
+        "reads": { "type": "array", "items": { "type": "string" } },
+        "actions": { "type": "array", "items": { "type": "string" } },
+        "advanced": {
+          "type": "object",
+          "required": ["protocol", "server", "scopes"],
+          "properties": {
+            "protocol": { "type": "string" },
+            "server": { "type": "string" },
+            "scopes": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "permissionSummary": { "type": "array", "items": { "type": "string" } }
+      },
+      "not": {
+        "anyOf": [
+          { "required": ["access_token"] },
+          { "required": ["refresh_token"] },
+          { "required": ["token"] },
+          { "required": ["secret"] }
+        ]
+      }
+    },
+    "IntegrationManifestRow": {
+      "type": "object",
+      "required": ["id", "organization_id", "workforce_plan_id", "system_name", "category", "connection_status", "config"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "organization_id": { "type": "string", "format": "uuid" },
+        "workforce_plan_id": { "type": "string", "format": "uuid" },
+        "system_name": { "type": "string" },
+        "category": { "type": "string" },
+        "connection_status": { "enum": ["connected", "requested", "not_requested", "unavailable"] },
+        "config": { "$ref": "#/$defs/IntegrationManifestConfig" }
+      }
+    }
+  }
+}

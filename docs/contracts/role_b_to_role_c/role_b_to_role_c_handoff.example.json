@@ -1,0 +1,507 @@
+{
+  "_comment": "Real rows pulled from an actual generated+approved workforce plan (a veterinary clinic, generated during Role B testing on 2026-07-29). Not invented.",
+  "workforce_plans": {
+    "id": "bb498d37-2a6a-40e2-a5b9-ecfa8db1c03a",
+    "role_b_handoff_id": "70f78868-1362-48c4-bdb4-50f8ea8dc169",
+    "organization_id": "02a28881-4f41-4b61-baff-58dc577aa9ce",
+    "version": 2,
+    "status": "approved",
+    "plan": {
+      "stale": false,
+      "agents": [
+        {
+          "config": {
+            "channels": [
+              "Gmail",
+              "WhatsApp Business",
+              "Google Calendar"
+            ],
+            "triggers": [
+              "event",
+              "manual"
+            ],
+            "dataAccess": [
+              "Customer contact and job records (HubSpot)",
+              "Shared inboxes (Gmail, WhatsApp Business)",
+              "Technician calendars (Google Calendar)"
+            ],
+            "quietHours": "21:00–08:00",
+            "processOwner": "Priya Nair",
+            "runFrequency": "Continuous during business hours (Mon–Sat 08:00–18:00)",
+            "approvalOwner": "Priya Nair",
+            "operatingMode": "act_after_approval",
+            "approvalActions": [
+              "Send a reply about a complaint, refund or cancellation",
+              "Change a schedule after the customer has confirmed"
+            ],
+            "forbiddenActions": [
+              "Issue refunds or credits",
+              "Delete customer records",
+              "Confirm a schedule change without approval once the customer has confirmed"
+            ],
+            "workflowsEnabled": {
+              "appointment-scheduling": true,
+              "customer-response-drafting": true
+            }
+          },
+          "status": "needs_configuration",
+          "agentId": "admin-operations",
+          "designAnswers": null,
+          "workflowOrder": [
+            "customer-response-drafting",
+            "appointment-scheduling"
+          ],
+          "designApproved": false
+        },
+        {
+          "config": {
+            "channels": [
+              "QuickBooks",
+              "Gmail",
+              "Slack"
+            ],
+            "triggers": [
+              "schedule",
+              "dependency"
+            ],
+            "dataAccess": [
+              "Invoices, payments and aging data (QuickBooks)",
+              "Customer billing contacts (HubSpot)",
+              "Reminder templates (Google Drive)"
+            ],
+            "quietHours": "Weekends and 19:00–08:00",
+            "processOwner": "Wei Ling Goh",
+            "runFrequency": "Weekly, Fridays 09:00",
+            "approvalOwner": "Wei Ling Goh",
+            "operatingMode": "act_after_approval",
+            "approvalActions": [
+              "Send the weekly payment-reminder batch",
+              "Propose an invoice write-off"
+            ],
+            "forbiddenActions": [
+              "Write off an invoice",
+              "Offer discounts or payment plans",
+              "Contact a customer more than once per week about the same invoice"
+            ],
+            "workflowsEnabled": {
+              "overdue-invoice-summary": true,
+              "payment-reminder-drafting": true
+            }
+          },
+          "status": "needs_configuration",
+          "agentId": "finance-followup",
+          "designAnswers": null,
+          "workflowOrder": [
+            "overdue-invoice-summary",
+            "payment-reminder-drafting"
+          ],
+          "designApproved": false
+        },
+        {
+          "config": {
+            "channels": [],
+            "triggers": [
+              "schedule"
+            ],
+            "dataAccess": [
+              "Paper triage forms",
+              "Clinic Practice Management System"
+            ],
+            "quietHours": "",
+            "processOwner": "Head Veterinarian",
+            "runFrequency": "Continuous during business hours",
+            "approvalOwner": "Head Veterinarian",
+            "operatingMode": "act_after_approval",
+            "triggerDetails": {
+              "schedule": "A client walks in with a pet needing unscheduled care"
+            },
+            "approvalActions": [
+              "Every treatment decision requires the attending vet's sign-off",
+              "Nothing clinical is finalized without a licensed vet"
+            ],
+            "forbiddenActions": [
+              "Suggest a diagnosis or treatment",
+              "Auto-schedule an emergency without vet confirmation",
+              "Write off or discount an invoice",
+              "Delete a medical record"
+            ],
+            "workflowsEnabled": {
+              "custom-wf-proc_walkin_triage": true
+            }
+          },
+          "status": "needs_information",
+          "agentId": "custom-proc_walkin_triage",
+          "designAnswers": null,
+          "workflowOrder": [
+            "custom-wf-proc_walkin_triage"
+          ],
+          "designApproved": false
+        }
+      ],
+      "status": "approved",
+      "version": 2,
+      "planRules": [],
+      "approvedAt": "2026-07-29T12:39:13.243Z",
+      "lastChange": null,
+      "costSummary": {
+        "perAgent": {
+          "admin-operations": {
+            "realSetupTokens": 1113,
+            "realSetupCostUsd": 0.004452,
+            "coveredProcessIds": [
+              "proc_appointment_scheduling"
+            ],
+            "monthlyProjectedTokens": 780000,
+            "monthlyProjectedCostUsd": 3.12
+          },
+          "finance-followup": {
+            "realSetupTokens": 1062,
+            "realSetupCostUsd": 0.004248,
+            "coveredProcessIds": [
+              "proc_invoice_followup"
+            ],
+            "monthlyProjectedTokens": 6000,
+            "monthlyProjectedCostUsd": 0.024
+          },
+          "custom-proc_walkin_triage": {
+            "realSetupTokens": 862,
+            "realSetupCostUsd": 0.003448,
+            "coveredProcessIds": [
+              "proc_walkin_triage"
+            ],
+            "monthlyProjectedTokens": 90000,
+            "monthlyProjectedCostUsd": 0.36
+          }
+        },
+        "plannerTokens": 1753,
+        "plannerCostUsd": 0.007012,
+        "totalRealSetupCostUsd": 0.01916,
+        "totalMonthlyProjectedCostUsd": 3.504
+      },
+      "sourceBlueprintId": "bp_02VETCLINIC",
+      "sourcePayloadHash": "sha256:vetclinic0000000000000000000000000000000000000000000000000000",
+      "customAgentTemplates": {
+        "custom-proc_walkin_triage": {
+          "id": "custom-proc_walkin_triage",
+          "name": "Walk-in emergency triage and treatment documentation Agent",
+          "role": "When a pet is brought in without an appointment, gather symptom information, judge how urgent the case is, and prepare structured notes so whichever vet is free can act immediately.",
+          "source": "custom",
+          "fitScore": 0,
+          "fitReason": "No preset agent's coverage overlaps this process closely enough.",
+          "setupCost": 0,
+          "workflows": [
+            {
+              "id": "custom-wf-proc_walkin_triage",
+              "name": "Walk-in emergency triage and treatment documentation",
+              "steps": [
+                "Ask the owner structured intake questions about symptoms, onset and severity",
+                "Pull the pet's prior medical history if it's an existing patient",
+                "Flag how urgent the case appears and notify the nearest available vet",
+                "Vet reviews the notes, examines the animal, and makes the clinical decision"
+              ],
+              "handoff": "Front Desk Lead to whichever vet is free; Attending Veterinarian to Head Veterinarian for the most severe cases",
+              "trigger": {
+                "kind": "schedule",
+                "label": "A client walks in with a pet needing unscheduled care"
+              },
+              "onFailure": "Escalates to Head Veterinarian on: Owner can't clearly describe symptoms, Pet has no prior record at this clinic, Multiple urgent cases arrive at once.",
+              "description": "When a pet is brought in without an appointment, gather symptom information, judge how urgent the case is, and prepare structured notes so whichever vet is free can act immediately.",
+              "humanApprovals": [
+                "Every treatment decision requires the attending vet's sign-off",
+                "Nothing clinical is finalized without a licensed vet"
+              ]
+            }
+          ],
+          "description": "When a pet is brought in without an appointment, gather symptom information, judge how urgent the case is, and prepare structured notes so whichever vet is free can act immediately.",
+          "monthlyCost": 0,
+          "autonomyNote": "Starts in draft-only mode until the owner completes the design cycle.",
+          "integrations": [
+            {
+              "purpose": "Used by the existing \"Walk-in emergency triage and treatment documentation\" process.",
+              "integrationId": "paper-triage-forms"
+            },
+            {
+              "purpose": "Used by the existing \"Walk-in emergency triage and treatment documentation\" process.",
+              "integrationId": "clinic-practice-management-system"
+            }
+          ],
+          "defaultConfig": {
+            "channels": [],
+            "triggers": [
+              "schedule"
+            ],
+            "dataAccess": [
+              "Paper triage forms",
+              "Clinic Practice Management System"
+            ],
+            "quietHours": "",
+            "processOwner": "Head Veterinarian",
+            "runFrequency": "Continuous during business hours",
+            "approvalOwner": "Head Veterinarian",
+            "operatingMode": "act_after_approval",
+            "triggerDetails": {
+              "schedule": "A client walks in with a pet needing unscheduled care"
+            },
+            "approvalActions": [
+              "Every treatment decision requires the attending vet's sign-off",
+              "Nothing clinical is finalized without a licensed vet"
+            ],
+            "forbiddenActions": [
+              "Suggest a diagnosis or treatment",
+              "Auto-schedule an emergency without vet confirmation",
+              "Write off or discount an invoice",
+              "Delete a medical record"
+            ],
+            "workflowsEnabled": {
+              "custom-wf-proc_walkin_triage": true
+            }
+          },
+          "customProposal": {
+            "trigger": "A client walks in with a pet needing unscheduled care",
+            "decisions": [
+              "Judging how urgent a case sounds from the owner's description",
+              "Deciding what prior history is relevant to surface immediately",
+              "The vet's actual clinical decision"
+            ],
+            "objective": "Consistent, structured triage notes and an advisory urgency flag ready before the vet is free — never a diagnosis or treatment suggestion.",
+            "whyCustom": "Judging case severity from an owner's free-form description and deciding what history is relevant requires interpretation, not a fixed rule set — but the actual clinical decision always stays with a licensed vet.",
+            "teamsInvolved": [
+              "Front Desk Lead",
+              "Head Veterinarian",
+              "Attending Veterinarian"
+            ],
+            "allowedActions": [
+              "Ask the owner structured intake questions about symptoms, onset and severity",
+              "Pull the pet's prior medical history if it's an existing patient",
+              "Flag how urgent the case appears and notify the nearest available vet"
+            ],
+            "approvalPoints": [
+              "Every treatment decision requires the attending vet's sign-off",
+              "Nothing clinical is finalized without a licensed vet"
+            ],
+            "requiredInputs": [
+              "Owner's description of symptoms",
+              "Pet's medical history",
+              "Observed vital signs if taken by front desk"
+            ],
+            "prohibitedActions": [
+              "Suggest a diagnosis or treatment",
+              "Auto-schedule an emergency without vet confirmation",
+              "Write off or discount an invoice",
+              "Delete a medical record"
+            ],
+            "missingInformation": [
+              "A formal severity rubric the clinic would be comfortable having software reference"
+            ]
+          },
+          "humanApprovals": [
+            "Every treatment decision requires the attending vet's sign-off",
+            "Nothing clinical is finalized without a licensed vet"
+          ],
+          "coveredOutcomes": [
+            "Consistent, structured triage notes and an advisory urgency flag ready before the vet is free — never a diagnosis or treatment suggestion."
+          ],
+          "designQuestions": [
+            {
+              "id": "dq-proc_walkin_triage-objective",
+              "answer": "Consistent, structured triage notes and an advisory urgency flag ready before the vet is free — never a diagnosis or treatment suggestion.",
+              "reason": "The objective sets the line between coordinating the work and deciding it.",
+              "factIds": [],
+              "question": "What should this agent achieve?",
+              "sections": [
+                "goals"
+              ]
+            },
+            {
+              "id": "dq-proc_walkin_triage-trigger",
+              "answer": "A client walks in with a pet needing unscheduled care",
+              "reason": "A precise trigger keeps the agent scoped to this process.",
+              "factIds": [],
+              "question": "When should the agent step in?",
+              "sections": [
+                "processes"
+              ]
+            },
+            {
+              "id": "dq-proc_walkin_triage-inputs",
+              "answer": "Owner's description of symptoms, Pet's medical history, Observed vital signs if taken by front desk",
+              "reason": "Required inputs define the read permissions the agent is granted.",
+              "factIds": [],
+              "question": "What information and systems does it need?",
+              "sections": [
+                "systems"
+              ]
+            },
+            {
+              "id": "dq-proc_walkin_triage-actions",
+              "answer": "Ask the owner structured intake questions about symptoms, onset and severity; Pull the pet's prior medical history if it's an existing patient; Flag how urgent the case appears and notify the nearest available vet. Never: Suggest a diagnosis or treatment, Auto-schedule an emergency without vet confirmation, Write off or discount an invoice, Delete a medical record.",
+              "reason": "Permitted and forbidden actions become hard guardrails in the build.",
+              "factIds": [],
+              "question": "What may it do on its own, and what must it never do?",
+              "sections": [
+                "rules"
+              ]
+            },
+            {
+              "id": "dq-proc_walkin_triage-escalation",
+              "answer": "Every treatment decision requires the attending vet's sign-off; Nothing clinical is finalized without a licensed vet",
+              "reason": "Escalation rules stop the agent from looping when it is stuck.",
+              "factIds": [],
+              "question": "When should it hand the case straight to a person?",
+              "sections": [
+                "rules",
+                "processes"
+              ]
+            }
+          ]
+        }
+      },
+      "sourceBlueprintVersion": 1
+    },
+    "approved_by": "owner",
+    "approved_at": "2026-07-29T12:39:13.243+00:00",
+    "created_at": "2026-07-29T12:38:32.525904+00:00"
+  },
+  "agent_configs": {
+    "id": "09ec80cc-1a34-40b6-a881-cff9a8251914",
+    "workforce_plan_id": "bb498d37-2a6a-40e2-a5b9-ecfa8db1c03a",
+    "agent_key": "custom-proc_walkin_triage",
+    "config": {
+      "channels": [],
+      "triggers": [
+        "schedule"
+      ],
+      "dataAccess": [
+        "Paper triage forms",
+        "Clinic Practice Management System"
+      ],
+      "quietHours": "",
+      "tokenUsage": {
+        "totalTokens": 862,
+        "promptTokens": 641,
+        "completionTokens": 221
+      },
+      "retryPolicy": {
+        "maxAttempts": 3,
+        "backoffSeconds": 30
+      },
+      "processOwner": "Head Veterinarian",
+      "runFrequency": "Continuous during business hours",
+      "approvalOwner": "Head Veterinarian",
+      "operatingMode": "act_after_approval",
+      "timeoutPolicy": {
+        "seconds": 120
+      },
+      "promptTemplate": "You are an AI agent responsible for walk-in emergency triage and treatment documentation. Your tasks include gathering symptom information from pet owners, assessing the urgency of cases, and preparing structured notes for the attending veterinarian. You must ask structured intake questions about symptoms, onset, and severity. If the pet is an existing patient, you will pull their prior medical history. After assessing the case, you will flag its urgency and notify the nearest available vet. Remember, every treatment decision requires the attending vet's sign-off, and nothing clinical can be finalized without a licensed vet. You are not allowed to suggest a diagnosis or treatment, auto-schedule an emergency without vet confirmation, write off or discount an invoice, or delete a medical record. Your process runs continuously during business hours.",
+      "triggerDetails": {
+        "schedule": "A client walks in with a pet needing unscheduled care"
+      },
+      "approvalActions": [
+        "Every treatment decision requires the attending vet's sign-off",
+        "Nothing clinical is finalized without a licensed vet"
+      ],
+      "forbiddenActions": [
+        "Suggest a diagnosis or treatment",
+        "Auto-schedule an emergency without vet confirmation",
+        "Write off or discount an invoice",
+        "Delete a medical record"
+      ],
+      "workflowsEnabled": {
+        "custom-wf-proc_walkin_triage": true
+      }
+    },
+    "created_at": "2026-07-29T12:39:39.306419+00:00"
+  },
+  "workflow_definitions": {
+    "id": "d944a19a-357f-4a20-a23c-52502ef90af3",
+    "workforce_plan_id": "bb498d37-2a6a-40e2-a5b9-ecfa8db1c03a",
+    "workflow_key": "custom-wf-proc_walkin_triage",
+    "definition": {
+      "id": "custom-wf-proc_walkin_triage",
+      "name": "Walk-in emergency triage and treatment documentation",
+      "steps": [
+        "Ask the owner structured intake questions about symptoms, onset and severity",
+        "Pull the pet's prior medical history if it's an existing patient",
+        "Flag how urgent the case appears and notify the nearest available vet",
+        "Vet reviews the notes, examines the animal, and makes the clinical decision"
+      ],
+      "handoff": "Front Desk Lead to whichever vet is free; Attending Veterinarian to Head Veterinarian for the most severe cases",
+      "trigger": {
+        "kind": "schedule",
+        "label": "A client walks in with a pet needing unscheduled care"
+      },
+      "onFailure": "Escalates to Head Veterinarian on: Owner can't clearly describe symptoms, Pet has no prior record at this clinic, Multiple urgent cases arrive at once.",
+      "composedBy": "zo-computer-stub",
+      "dataSchema": {
+        "input": [
+          "owner_symptom_description",
+          "symptom_onset",
+          "symptom_severity",
+          "existing_patient_medical_history"
+        ],
+        "output": [
+          "case_urgency_flag",
+          "structured_notes_for_vet",
+          "notification_to_vet"
+        ]
+      },
+      "description": "When a pet is brought in without an appointment, gather symptom information, judge how urgent the case is, and prepare structured notes so whichever vet is free can act immediately.",
+      "retryPolicy": {
+        "maxAttempts": 3,
+        "backoffSeconds": 30
+      },
+      "timeoutPolicy": {
+        "seconds": 120
+      },
+      "approvalPolicy": {
+        "channel": "dashboard",
+        "escalation": "Escalates to Head Veterinarian on: Owner can't clearly describe symptoms, Pet has no prior record at this clinic, Multiple urgent cases arrive at once.",
+        "approverRole": "Head Veterinarian"
+      },
+      "humanApprovals": [
+        "Every treatment decision requires the attending vet's sign-off",
+        "Nothing clinical is finalized without a licensed vet"
+      ]
+    },
+    "created_at": "2026-07-29T12:39:39.505582+00:00"
+  },
+  "integration_manifests": {
+    "id": "9f63d967-e18f-4209-b44a-ba582e4a01b5",
+    "organization_id": "02a28881-4f41-4b61-baff-58dc577aa9ce",
+    "workforce_plan_id": "bb498d37-2a6a-40e2-a5b9-ecfa8db1c03a",
+    "system_name": "Gmail",
+    "category": "Customer communication",
+    "connection_status": "not_requested",
+    "config": {
+      "reads": [
+        "Incoming customer emails",
+        "Email threads and labels",
+        "Shared inbox folders"
+      ],
+      "actions": [
+        "Draft replies for review",
+        "Label and sort enquiries",
+        "Queue approved sends"
+      ],
+      "purpose": "Lets agents read the shared ops inbox and prepare reply drafts without sending anything on their own.",
+      "advanced": {
+        "scopes": [
+          "gmail.readonly",
+          "gmail.compose",
+          "gmail.labels"
+        ],
+        "server": "https://gmail.googleapis.com",
+        "protocol": "OAuth 2.0"
+      },
+      "neededBy": [
+        "admin-operations",
+        "finance-followup"
+      ],
+      "permissionSummary": [
+        "Oriant can read mail arriving in the shared ops inbox.",
+        "Agents prepare drafts; nothing is sent without your approval rules.",
+        "You can disconnect at any time; existing drafts stay in Gmail."
+      ]
+    }
+  }
+}
