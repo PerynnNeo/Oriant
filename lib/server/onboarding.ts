@@ -379,8 +379,12 @@ export function updateOnboardingSession(
   if (patch.organizationShape) session.organization.shape = patch.organizationShape;
   if (patch.approvalPreference) session.organization.approvalPreference = patch.approvalPreference;
   if (patch.onboardingOwnership) session.organization.onboardingOwnership = patch.onboardingOwnership;
-  if (patch.employeeCount !== undefined && patch.employeeCount !== null) {
-    session.organization.employeeCount = patch.employeeCount;
+  if (patch.employeeCount !== undefined) {
+    if (patch.employeeCount === null) {
+      delete session.organization.employeeCount;
+    } else {
+      session.organization.employeeCount = patch.employeeCount;
+    }
   }
   if (patch.approvalOwner !== undefined) session.organization.approvalOwner = patch.approvalOwner.trim();
   if (patch.employeeEmails) session.organization.employeeEmails = patch.employeeEmails;
@@ -434,8 +438,9 @@ export function updateOnboardingSession(
     else delete session.answers.current_workflow;
   }
   if (patch.organizationShape) saveAnswer("organization_shape", patch.organizationShape, "typed");
-  if (patch.employeeCount !== undefined && patch.employeeCount !== null) {
-    saveAnswer("employee_count", patch.employeeCount, "typed");
+  if (patch.employeeCount !== undefined) {
+    if (patch.employeeCount === null) delete session.answers.employee_count;
+    else saveAnswer("employee_count", patch.employeeCount, "typed");
   }
   if (patch.approvalOwner !== undefined) {
     if (patch.approvalOwner.trim()) saveAnswer("approval_owner", patch.approvalOwner.trim(), "typed");

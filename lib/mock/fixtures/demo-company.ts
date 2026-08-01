@@ -13,9 +13,9 @@ export const DEMO_COMPANY: CompanyProfile = {
   industry: "Residential maintenance and home services",
   location: "Singapore",
   businessModel: "Appointment-based services with recurring maintenance plans",
-  teamSize: 18,
+  teamSize: 1,
   monthlyVolume: "~650 customer requests, 420 completed jobs",
-  teams: ["Customer Care", "Field Operations", "Marketing", "Finance", "Management"],
+  teams: ["Owner"],
   primaryGoal:
     "Reduce manual coordination while keeping customer-facing and financial decisions human",
   alwaysApprove: [
@@ -116,8 +116,8 @@ export const TOOL_CATEGORY_ORDER: ToolCategory[] = [
 
 /** Spec §7.1 — Sarah's hardcoded opening voice answer. */
 export const DEMO_INTRO_ANSWER =
-  "We run BrightPath Home Services in Singapore, eighteen of us doing residential " +
-  "maintenance, around 650 customer requests a month. Too much of our day goes into " +
+  "I run BrightPath Home Services in Singapore, providing residential maintenance and " +
+  "handling around 650 customer requests a month. Too much of my day goes into " +
   "sorting Gmail and WhatsApp messages by hand and rescheduling appointments over the " +
   "phone. Marketing keeps waiting on me, and every Friday the finance team combs " +
   "through overdue invoices manually.";
