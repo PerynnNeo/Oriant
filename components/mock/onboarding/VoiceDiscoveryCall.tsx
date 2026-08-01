@@ -9,7 +9,7 @@ import { useDemoStore } from "@/lib/mock/store";
 import styles from "./voice-call.module.css";
 
 type CallStage = "onboarding" | "interview" | "clarifications" | "complete";
-type CallQuestion = { id: string; section: string; question: string; helper?: string; examples?: string[] };
+type CallQuestion = { id: string; section: string; question: string; helper?: string; examples?: string[]; parentQuestionId?: string };
 
 const STARTER_QUESTIONS: CallQuestion[] = [
   { id: "organization_shape", section: "Getting oriented", question: "Is it just you, or are you setting this up with a team?", helper: "A quick answer is fine. You can say just me, or me and my team." },
@@ -58,6 +58,8 @@ export default function VoiceDiscoveryCall() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [loadingNext, setLoadingNext] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [questionReady, setQuestionReady] = useState(false);
+  const [micReady, setMicReady] = useState(false);
   const greetedRef = useRef(false);
 
   const activeQuestion = questions[activeIndex] ?? null;
@@ -66,17 +68,19 @@ export default function VoiceDiscoveryCall() {
   }, [activeQuestion?.id]);
 
   useEffect(() => {
-    if (!callStarted || !activeQuestion || stage === "complete") return;
+    setQuestionReady(false);
+    if (!callStarted || !micReady || !activeQuestion || stage === "complete") return;
+    const startListeningAfterQuestion = () => setQuestionReady(true);
     if (!greetedRef.current) {
       greetedRef.current = true;
       void speakAgent("Hello, I’m Oriant. I’ll ask a few questions about your business and listen for what could be made easier. Let’s start.", () => {
-        void speakAgent(activeQuestion.question);
+        void speakAgent(activeQuestion.question, startListeningAfterQuestion);
       });
     } else {
-      void speakAgent(activeQuestion.question);
+      void speakAgent(activeQuestion.question, startListeningAfterQuestion);
     }
     return () => cancelSpeech();
-  }, [activeQuestion, callStarted, stage]);
+  }, [activeQuestion, callStarted, micReady, stage]);
 
   const finishCall = async () => {
     setLoadingNext(true);
@@ -96,19 +100,34 @@ export default function VoiceDiscoveryCall() {
     }
   };
 
+  const beginCall = async () => {
+    // Let the question recorder open the microphone once, after Oriant has
+    // finished speaking. Opening and immediately stopping a preflight stream
+    // causes Safari to end the next MediaStreamTrack with a capture failure.
+    setMicReady(true);
+    setCallStarted(true);
+  };
+
   const saveAnswer = async (question: CallQuestion, answer: string) => {
     const trimmed = answer.trim();
     if (!trimmed) return;
+    const persistedQuestionId = question.parentQuestionId ?? question.id;
+    const previousAnswer = question.parentQuestionId
+      ? answers[question.parentQuestionId] ?? captured.find((item) => item.id === question.parentQuestionId)?.answer ?? ""
+      : "";
+    const persistedAnswer = previousAnswer
+      ? `${previousAnswer}\n\nFollow-up: ${trimmed}`
+      : trimmed;
     setError(null);
     setLoadingNext(true);
-    setAnswers((current) => ({ ...current, [question.id]: trimmed }));
+    setAnswers((current) => ({ ...current, [persistedQuestionId]: persistedAnswer }));
 
     try {
       if (stage === "onboarding") {
         const response = await fetch("/api/onboarding/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questionId: question.id, transcript: trimmed, confirmedAnswer: trimmed, language: "en" }),
+          body: JSON.stringify({ questionId: persistedQuestionId, transcript: trimmed, confirmedAnswer: persistedAnswer, language: "en" }),
         });
         if (!response.ok) throw new Error("Supabase could not save this answer.");
         const patch = derivePatch(question.id, trimmed);
@@ -124,7 +143,7 @@ export default function VoiceDiscoveryCall() {
         const response = await fetch("/api/discovery/voice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ questionId: question.id, transcript: trimmed, confirmedAnswer: trimmed, language: "en" }),
+          body: JSON.stringify({ questionId: persistedQuestionId, transcript: trimmed, confirmedAnswer: persistedAnswer, language: "en" }),
         });
         if (!response.ok) throw new Error("Supabase could not save this interview answer.");
         syncDiscoveryFromServer({ answers: { [question.id]: trimmed } });
@@ -138,9 +157,40 @@ export default function VoiceDiscoveryCall() {
       }
 
       setCaptured((current) => [
-        ...current.filter((item) => item.id !== question.id),
-        { id: question.id, section: question.section, answer: trimmed },
+        ...current.filter((item) => item.id !== persistedQuestionId),
+        { id: persistedQuestionId, section: question.section, answer: persistedAnswer },
       ]);
+
+      // Give the Discovery Agent one chance to close a material gap before
+      // moving on. Follow-ups are saved back to the original question ID.
+      if (!question.parentQuestionId && (stage === "onboarding" || stage === "interview")) {
+        const followUpResponse = await fetch("/api/discovery/follow-up", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage, questionId: question.id, question: question.question, answer: trimmed }),
+        });
+        if (followUpResponse.ok) {
+          const followUp = await followUpResponse.json() as { question?: string | null; helperText?: string; examples?: string[] };
+          if (followUp.question?.trim()) {
+            const followUpQuestion: CallQuestion = {
+              id: `${question.id}__follow_up`,
+              parentQuestionId: question.id,
+              section: question.section,
+              question: followUp.question.trim(),
+              helper: followUp.helperText?.trim() || "Add the detail that would make this workflow clearer.",
+              examples: followUp.examples ?? [],
+            };
+            setQuestions((current) => [
+              ...current.slice(0, activeIndex + 1),
+              followUpQuestion,
+              ...current.slice(activeIndex + 1),
+            ]);
+            setAnswers((current) => ({ ...current, [question.id]: trimmed }));
+            setActiveIndex((index) => index + 1);
+            return;
+          }
+        }
+      }
 
       if (activeIndex < questions.length - 1) {
         setActiveIndex((index) => index + 1);
@@ -172,10 +222,10 @@ export default function VoiceDiscoveryCall() {
       setError(err instanceof Error ? err.message : "Could not save this answer.");
       setAnswers((current) => {
         const next = { ...current };
-        delete next[question.id];
+        delete next[persistedQuestionId];
         return next;
       });
-      setCaptured((current) => current.filter((item) => item.id !== question.id));
+      setCaptured((current) => current.filter((item) => item.id !== persistedQuestionId));
     } finally {
       setLoadingNext(false);
     }
@@ -204,11 +254,10 @@ export default function VoiceDiscoveryCall() {
           <h1>Ready when you are.</h1>
           <p>Oriant will ask about your business, how work happens, and what you would like to improve. Your answers will appear as cards while you talk.</p>
           <div className={styles.preCallDetails}>
-            <span><Mic2 size={16} aria-hidden /> Live transcript</span>
             <span><Check size={16} aria-hidden /> Answers saved as you go</span>
             <span><Circle size={16} aria-hidden /> You can finish with the answers you have</span>
           </div>
-          <button type="button" className={styles.primaryAction} onClick={() => setCallStarted(true)}>
+          <button type="button" className={styles.primaryAction} onClick={() => void beginCall()}>
             <Mic2 size={17} aria-hidden /> Start call
           </button>
           <p className={styles.preCallNote}>Your microphone will only be requested after you press Start call.</p>
@@ -244,30 +293,6 @@ export default function VoiceDiscoveryCall() {
           </div>
 
           <div className={styles.callColumns}>
-            <section className={styles.transcriptPanel} aria-live="polite">
-              <p className={styles.eyebrow}>Live transcript</p>
-              <h2>Speak naturally.</h2>
-              <p className={styles.transcriptHint}>Your words will appear here as Oriant listens.</p>
-              <div className={styles.transcriptStream}>
-                {captured.length === 0 && !liveTranscript ? (
-                  <p className={styles.transcriptEmpty}>Your conversation will appear here once you start speaking.</p>
-                ) : null}
-                {captured.map((item) => (
-                  <div className={styles.transcriptTurn} key={item.id}>
-                    <span className={styles.transcriptLabel}>You</span>
-                    <p>{item.answer}</p>
-                  </div>
-                ))}
-                {liveTranscript ? (
-                  <div className={styles.transcriptTurn}>
-                    <span className={styles.transcriptLabel}>You · listening</span>
-                    <p className={styles.transcriptInterim}>{liveTranscript}</p>
-                  </div>
-                ) : null}
-              </div>
-              <div className={styles.transcriptStatus}><span className={styles.statusDot} />{loadingNext ? "Saving your answer…" : "Listening for your answer"}</div>
-            </section>
-
             <section className={styles.callMain}>
           <div className={styles.callTop}>
             <span className={styles.eyebrow}>{stageLabel}</span>
@@ -278,9 +303,15 @@ export default function VoiceDiscoveryCall() {
             <h1>{activeQuestion?.question}</h1>
             <p className={styles.helper}>{activeQuestion?.helper}</p>
             <VoiceAnswer
+              key={activeQuestion?.id}
               answer={activeQuestion?.question ?? ""}
-              onConfirm={(answer) => void saveAnswer(activeQuestion!, answer)}
-              onLiveTextChange={setLiveTranscript}
+                onConfirm={(answer) => void saveAnswer(activeQuestion!, answer)}
+                onLiveTextChange={setLiveTranscript}
+                // Do not open the microphone while Oriant is still speaking
+                // the question. Otherwise the recording contains the prompt
+                // and ElevenLabs may return "[background noise]".
+                autoStart={callStarted && questionReady}
+                autoAdvance
               confirmLabel={loadingNext ? "Saving…" : "Save answer"}
               placeholder="Or type your answer here…"
             />

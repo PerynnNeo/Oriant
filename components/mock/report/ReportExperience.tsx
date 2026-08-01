@@ -18,7 +18,6 @@ import type { OnboardingState, ReportSectionId } from "@/lib/mock/types";
 import type { CompanyReport } from "@/lib/contracts";
 import { useDemoStore } from "@/lib/mock/store";
 import { atLeast } from "@/lib/mock/state-machine";
-import { DEMO_TODAY } from "@/lib/mock/fixtures/ids";
 import { DUR, EASE } from "@/lib/mock/motion";
 import Drawer from "@/components/mock/ui/Drawer";
 import StatusBadge from "@/components/mock/ui/StatusBadge";
@@ -70,6 +69,7 @@ export default function ReportExperience() {
   const sectionEls = useRef<Partial<Record<ReportPaneSectionId, HTMLElement | null>>>({});
 
   const approved = report.status === "approved";
+  const preparedAt = sourceReport?.generatedAt ?? new Date().toISOString();
 
   useEffect(() => {
     let cancelled = false;
@@ -349,7 +349,7 @@ export default function ReportExperience() {
               <p className={styles.docDateLine}>
                 {approved && report.approvedAt
                   ? `Approved ${formatDemoDateTime(report.approvedAt)}`
-                  : `Prepared ${formatDemoDate(DEMO_TODAY)}`}
+                  : `Prepared ${formatDemoDate(preparedAt)}`}
                 <span aria-hidden>·</span>
                 {sections.length + 1} sections · {reportFacts.length} facts
                 <span aria-hidden>·</span>

@@ -7,6 +7,7 @@
 import type { CompanyReport, Db } from "../contracts";
 import { aiandJson } from "./providers/aiand";
 import { GateError, trace } from "./orchestrator";
+import { nowIso } from "./store";
 
 const selected = (m: Record<string, boolean>) => Object.keys(m).filter((k) => m[k]);
 
@@ -162,6 +163,7 @@ export async function generateReport(db: Db): Promise<void> {
   db.report = {
     version: 1,
     status: "draft",
+    generatedAt: nowIso(),
     ...result.data,
     history: [{ v: "v1", t: "Draft generated from your call" }],
   };

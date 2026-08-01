@@ -491,37 +491,53 @@ export function attachVoiceTranscript(
   const now = nowIso();
   const voice: VoiceSession = session.voice ?? {
     id: uid("voice"),
-    provider: "nosana",
+    provider: "elevenlabs",
     language: input.language ?? "en",
     startedAt: now,
     lastTurnAt: now,
     turns: [],
   };
   voice.lastTurnAt = now;
+  const rawAnswer = input.confirmedAnswer?.trim() || undefined;
+  const lowerAnswer = rawAnswer?.toLowerCase() ?? "";
+  const canonicalAnswer = input.questionId === "organization_shape"
+    ? (/\b(just me|only me|solo|myself)\b/.test(lowerAnswer)
+      ? "Just me"
+      : /\b(me and my team|my team|team|employees|staff)\b/.test(lowerAnswer)
+        ? "Me and my team"
+        : rawAnswer)
+    : input.questionId === "setup_builder"
+      ? (/\b(someone else|invite|another person|team|operator)\b/.test(lowerAnswer) ? "I want someone else to build it" : rawAnswer)
+      : rawAnswer;
   voice.turns.unshift({
     id: uid("turn"),
     questionId: input.questionId,
     transcript: input.transcript,
-    confirmedAnswer: input.confirmedAnswer,
-    status: input.confirmedAnswer ? "confirmed" : "captured",
+    confirmedAnswer: rawAnswer,
+    status: rawAnswer ? "confirmed" : "captured",
     createdAt: now,
   });
   session.voice = voice;
-  session.transcriptReviewRequired = !input.confirmedAnswer;
+  session.transcriptReviewRequired = !rawAnswer;
   session.preferredChannel = "voice";
   session.status = input.confirmedAnswer ? "in_progress" : "voice_in_progress";
 
-  if (input.confirmedAnswer?.trim()) {
+  if (canonicalAnswer) {
     const question = questionById(db, input.questionId);
     session.answers[input.questionId] = {
       questionId: input.questionId,
       fieldPath: question.fieldPath,
-      value: input.confirmedAnswer.trim(),
+      value: canonicalAnswer,
       source: "transcript_review",
       confirmed: true,
       confidence: 0.9,
       updatedAt: now,
     };
+    if (input.questionId === "organization_shape") {
+      const lowerCanonical = canonicalAnswer.toLowerCase();
+      if (lowerCanonical === "just me") session.organization.shape = "solo";
+      if (lowerCanonical === "me and my team") session.organization.shape = "owner_with_team";
+    }
     audit(db, "voice.transcript_confirmed", input.questionId, session.id);
   } else {
     audit(db, "voice.turn_captured", input.questionId, session.id);
@@ -542,7 +558,7 @@ export function attachDiscoveryVoiceTranscript(
   const now = nowIso();
   const voice: VoiceSession = session.voice ?? {
     id: uid("voice"),
-    provider: "nosana",
+    provider: "elevenlabs",
     language: input.language ?? "en",
     startedAt: now,
     lastTurnAt: now,

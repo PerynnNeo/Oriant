@@ -7,6 +7,14 @@ type ClarificationResult = {
   error?: string;
 };
 
+export type AnswerFollowUpResult = {
+  mode: "live" | "fixture";
+  question: string | null;
+  helperText: string;
+  examples: string[];
+  error?: string;
+};
+
 const RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -117,4 +125,51 @@ export async function generateDiscoveryClarifications(db: Db): Promise<Clarifica
   const valid = questions.length <= 4 && questions.every((q) => q && q.id && q.question && q.reason && q.helperText && Array.isArray(q.examples));
   if (!valid) return { mode: "fixture", questions: fixture.questions, error: "AI& returned an invalid clarification review." };
   return { mode: result.mode, questions, ...(result.error ? { error: result.error } : {}) };
+}
+
+const FOLLOW_UP_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["question", "helperText", "examples"],
+  properties: {
+    question: { anyOf: [{ type: "string" }, { type: "null" }] },
+    helperText: { type: "string" },
+    examples: { type: "array", maxItems: 3, items: { type: "string" } },
+  },
+} as const;
+
+/** Check one answer before the guided call advances to its next card. */
+export async function reviewAnswerForFollowUp(
+  db: Db,
+  input: { stage: "onboarding" | "interview"; questionId: string; question: string; answer: string },
+): Promise<AnswerFollowUpResult> {
+  const session = activeSession(db);
+  if (!session) return { mode: "fixture", question: null, helperText: "", examples: [], error: "No active onboarding session was found." };
+
+  const fixture = { question: null, helperText: "", examples: [] as string[] };
+  const result = await aiandJson<typeof fixture>({
+    operation: "discovery_answer_follow_up",
+    schemaName: "discovery_answer_follow_up",
+    schema: FOLLOW_UP_SCHEMA,
+    fixture,
+    responseFormat: "json_schema",
+    reasoningEffort: "none",
+    timeoutMs: 8_000,
+    system:
+      "You are Oriant's answer quality reviewer inside a guided business discovery call. " +
+      "Read the question and the owner's answer, then decide whether one important detail is still missing. " +
+      "Return question null when the answer is sufficiently concrete for a workflow report. " +
+      "Ask exactly one short follow-up only when the answer is vague, incomplete, or missing a consequential detail such as a trigger, step, handoff, tool, frequency, exception, approval boundary, input, or desired outcome. " +
+      "Do not ask generic company questions, do not repeat the original question, and do not ask for documents. Return only JSON.",
+    user:
+      `Stage: ${input.stage}\nQuestion ID: ${input.questionId}\nQuestion: ${input.question}\nOwner answer: ${input.answer}\n\n` +
+      `Other onboarding answers: ${JSON.stringify(Object.fromEntries(Object.entries(session.answers).map(([id, answer]) => [id, answer.value])), null, 2)}\n` +
+      `Interview answers already captured: ${JSON.stringify(db.call.answers, null, 2)}`,
+  });
+
+  const data = result.data as unknown as { question?: unknown; helperText?: unknown; examples?: unknown };
+  const question = typeof data.question === "string" && data.question.trim() ? data.question.trim() : null;
+  const helperText = typeof data.helperText === "string" ? data.helperText.trim() : "";
+  const examples = Array.isArray(data.examples) ? data.examples.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 3) : [];
+  return { mode: result.mode, question, helperText, examples, ...(result.error ? { error: result.error } : {}) };
 }

@@ -6,9 +6,8 @@ import { mirrorOnboardingToSupabase } from "@/lib/server/onboarding-supabase";
 import { withDb } from "@/lib/server/store";
 
 /**
- * Voice → text via the Nosana-hosted Whisper workload. When the workload is
- * not configured or fails, the client keeps the typed path (F-03) — the
- * transcript the owner confirms on screen is what gets submitted, never audio.
+ * Voice -> text via the configured Nosana Whisper provider. The confirmed
+ * transcript is saved; audio itself is never persisted by this route.
  */
 export async function POST(req: NextRequest) {
   const form = await req.formData();

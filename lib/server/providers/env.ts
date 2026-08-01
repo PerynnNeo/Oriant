@@ -49,6 +49,7 @@ export function providerEnv(): ProviderEnv {
 export function aiandLive() { const e = providerEnv().aiand; return !!(e.key && e.baseUrl && e.model); }
 export function nosanaLive() { const e = providerEnv().nosana; return !!e.whisperUrl; }
 export function elevenLabsLive() { const e = providerEnv().elevenlabs; return !!(e.key && e.voiceId); }
+export function elevenLabsSttLive() { return !!providerEnv().elevenlabs.key; }
 export function doublewordLive() { const e = providerEnv().doubleword; return !!(e.key && e.baseUrl && e.model); }
 export function daytonaLive() { const e = providerEnv().daytona; return !!e.key; }
 export function supabaseLive() { const e = providerEnv().supabase; return !!(e.url && (e.serviceRoleKey || e.anonKey)); }

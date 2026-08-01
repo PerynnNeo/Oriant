@@ -28,6 +28,13 @@ function approvalOwnerForOrganization(session: OnboardingSession | null, ownerNa
   return approvalOwner;
 }
 
+const ORGANIZATION_SHAPES = new Set<OnboardingSession["organization"]["shape"]>([
+  "solo",
+  "owner_with_team",
+  "multi_role_team",
+  "manager_led",
+]);
+
 async function ensureOrganization(db: Db) {
   const supabase = getSupabaseAdmin();
   if (!supabase) return null;
@@ -36,15 +43,16 @@ async function ensureOrganization(db: Db) {
   const activeSession = db.onboarding.activeSessionId
     ? db.onboarding.sessions[db.onboarding.activeSessionId] ?? null
     : null;
+  const shape = activeSession?.organization.shape;
   const upsert = await supabase
     .from("organizations")
     .upsert({
       external_key: externalKey,
       name: db.org.name,
       approval_owner: approvalOwnerForOrganization(activeSession, db.org.owner),
-      shape: activeSession
-        ? activeSession.organization.shape ?? "solo"
-        : "solo",
+      // Voice transcripts are raw input. Only write a value accepted by the
+      // database constraint; the canonical value is set by onboarding logic.
+      shape: shape && ORGANIZATION_SHAPES.has(shape) ? shape : "solo",
       employee_count: activeSession
         ? activeSession.organization.employeeCount ?? null
         : null,

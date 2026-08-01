@@ -1,16 +1,11 @@
 /**
- * Nosana adapter — GPU-hosted Whisper speech recognition (blueprint §20.3).
+ * Nosana Whisper adapter for recorded voice answers.
  *
- * NOSANA_WHISPER_URL is the service URL of a deployed Whisper workload
- * (an output of deploying Nosana's official Whisper job — not a model name).
- * The adapter posts recorded interview audio and returns the transcript.
- *
- * Typed input always remains a complete fallback (blueprint F-03): when the
- * workload is unconfigured or unreachable this returns ok:false and the UI
- * keeps the typed path.
+ * The workload must expose an OpenAI-compatible
+ * `/v1/audio/transcriptions` endpoint. Nosana is the only server-side STT
+ * provider used here; typed input remains available when the workload is down.
  */
 import { nosanaLive, providerEnv } from "./env";
-import { transcribeWithElevenLabs } from "./elevenlabs";
 
 export interface TranscribeResult {
   ok: boolean;
@@ -21,56 +16,52 @@ export interface TranscribeResult {
 
 export async function transcribe(audio: Blob): Promise<TranscribeResult> {
   if (!nosanaLive()) {
-    const eleven = await transcribeWithElevenLabs(audio);
-    if (eleven.ok) return { ok: true, mode: "live", text: eleven.text };
-    return { ok: false, mode: "fixture", error: eleven.error || "No speech-to-text provider is configured" };
+    return { ok: false, mode: "fixture", error: "Nosana Whisper is not configured" };
   }
+
   const env = providerEnv().nosana;
   const base = env.whisperUrl!.replace(/\/$/, "");
-  // Whisper servers commonly expose an OpenAI-compatible transcription route;
-  // try the exact URL first, then the conventional path.
-  const endpoints = [base, `${base}/v1/audio/transcriptions`];
-  // Error strings reach the browser and the provider trace — never include the
-  // endpoint URL (server-side configuration) in them; log details server-side.
-  let lastErr = "";
-  for (const [i, url] of endpoints.entries()) {
+  const endpoints = [`${base}/v1/audio/transcriptions`, base];
+  let lastError = "Nosana Whisper workload is unavailable";
+
+  for (const url of endpoints) {
     try {
       const form = new FormData();
-      form.append("file", audio, "answer.webm");
+      form.append("file", audio, "answer.wav");
       form.append("model", "whisper-1");
-      const res = await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers: env.key ? { Authorization: `Bearer ${env.key}` } : undefined,
         body: form,
         signal: AbortSignal.timeout(120_000),
       });
-      const ctype = res.headers.get("content-type") ?? "";
-      const server = res.headers.get("server") ?? "";
-      // A web UI (JupyterLab, a dashboard) answering here means the deployment
-      // isn't an ASR API at all — say so instead of a bare status code.
-      const looksLikeWebUi = ctype.includes("text/html") || /tornado/i.test(server);
-      if (!res.ok) {
-        console.error(`[margo] nosana endpoint #${i + 1} returned ${res.status} (${url}) server=${server || "?"} content-type=${ctype || "?"}`);
-        lastErr = looksLikeWebUi
-          ? `that URL serves a web UI (${server || "HTML"}), not a speech-recognition API — deploy a Whisper job that exposes /v1/audio/transcriptions`
-          : `whisper workload returned ${res.status}`;
+      const contentType = response.headers.get("content-type") ?? "";
+      const server = response.headers.get("server") ?? "";
+      const detail = await response.text();
+
+      if (!response.ok) {
+        console.error(`[voice] Nosana Whisper returned ${response.status}`, { url, server, contentType, detail: detail.slice(0, 300) });
+        lastError = response.status === 503
+          ? "Nosana Whisper workload is starting or unavailable. Please try again shortly."
+          : `Nosana Whisper returned ${response.status}`;
         continue;
       }
-      if (looksLikeWebUi) {
-        console.error(`[margo] nosana endpoint #${i + 1} returned HTML, not JSON (${url})`);
-        lastErr = "that URL serves a web UI, not a speech-recognition API";
+      if (contentType.includes("text/html") || /tornado|jupyter/i.test(server)) {
+        lastError = "The Nosana URL serves a web UI, not a Whisper transcription API.";
         continue;
       }
-      const body = (await res.json()) as { text?: string; transcription?: string };
-      const text = body.text ?? body.transcription;
-      if (typeof text === "string") return { ok: true, mode: "live", text };
-      lastErr = "whisper workload returned an unexpected response shape";
-    } catch (err) {
-      console.error(`[margo] nosana endpoint #${i + 1} failed (${url}):`, err);
-      lastErr = "whisper workload unreachable";
+
+      const body = JSON.parse(detail) as { text?: string; transcription?: string };
+      const text = (body.text ?? body.transcription ?? "").trim();
+      if (text && !/^\[(background noise|silence|music)\]$/i.test(text)) {
+        return { ok: true, mode: "live", text };
+      }
+      lastError = "Nosana Whisper returned no speech in the recording.";
+    } catch (error) {
+      console.error("[voice] Nosana Whisper request failed", error);
+      lastError = "Nosana Whisper workload is unreachable.";
     }
   }
-  const eleven = await transcribeWithElevenLabs(audio);
-  if (eleven.ok) return { ok: true, mode: "live", text: eleven.text };
-  return { ok: false, mode: "live", error: lastErr || eleven.error };
+
+  return { ok: false, mode: "live", error: lastError };
 }

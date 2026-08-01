@@ -41,6 +41,7 @@ interface BrowserSpeechRecognition {
   lang: string;
   maxAlternatives: number;
   onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+  onstart: (() => void) | null;
   onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
   onend: (() => void) | null;
   start: () => void;
@@ -56,7 +57,31 @@ declare global {
   interface Window {
     SpeechRecognition?: BrowserSpeechRecognitionConstructor;
     webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+    webkitAudioContext?: typeof AudioContext;
   }
+}
+
+function encodeWav(chunks: Float32Array[], sampleRate: number): Blob {
+  const sampleCount = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + sampleCount * 2);
+  const view = new DataView(buffer);
+  const text = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
+  };
+  text(0, "RIFF"); view.setUint32(4, 36 + sampleCount * 2, true); text(8, "WAVE");
+  text(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true); text(36, "data"); view.setUint32(40, sampleCount * 2, true);
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (const sample of chunk) {
+      const value = Math.max(-1, Math.min(1, sample));
+      view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+      offset += 2;
+    }
+  }
+  return new Blob([buffer], { type: "audio/wav" });
 }
 
 function errorMessage(error: SpeechError): string {
@@ -106,16 +131,26 @@ export function useBrowserSpeechCapture({
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const pcmChunksRef = useRef<Float32Array[]>([]);
+  const pcmSampleRateRef = useRef(48_000);
+  const stopPcmRef = useRef<(() => void) | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const deliveredRef = useRef<string | null>(null);
   const manualStopRef = useRef(false);
+  const restartingRef = useRef(false);
+  const captureActiveRef = useRef(false);
+  const speechSeenRef = useRef(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noSpeechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopRef = useRef<(() => void) | null>(null);
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
-
   const RecognitionCtor = useMemo<BrowserSpeechRecognitionConstructor | null>(() => {
     if (typeof window === "undefined") return null;
     return window.SpeechRecognition ?? window.webkitSpeechRecognition ?? null;
@@ -125,17 +160,26 @@ export function useBrowserSpeechCapture({
     typeof window !== "undefined"
     && typeof navigator !== "undefined"
     && !!navigator.mediaDevices?.getUserMedia
-    && typeof MediaRecorder !== "undefined";
+    && (typeof MediaRecorder !== "undefined" || !!(window.AudioContext || window.webkitAudioContext));
 
   const supported = RecognitionCtor !== null || recordingSupported;
 
   const stop = useCallback(() => {
     manualStopRef.current = true;
+    restartingRef.current = false;
+    captureActiveRef.current = false;
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
+    silenceTimerRef.current = null;
+    noSpeechTimerRef.current = null;
     recognitionRef.current?.stop();
+    stopPcmRef.current?.();
+    stopPcmRef.current = null;
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       recorderRef.current.stop();
     }
   }, []);
+  stopRef.current = stop;
 
   const reset = useCallback(() => {
     setTranscript("");
@@ -143,10 +187,26 @@ export function useBrowserSpeechCapture({
     setInterimTranscript("");
     setError(null);
     deliveredRef.current = null;
+    captureActiveRef.current = false;
+    speechSeenRef.current = false;
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
   }, []);
 
   const transcribeRecording = useCallback(async () => {
-    const blob = new Blob(chunksRef.current, { type: recorderRef.current?.mimeType || "audio/webm" });
+    // When the browser recognizer already produced usable words, do not send
+    // a second copy of the recording. This is especially important on Safari,
+    // where the native recognizer can succeed while MediaRecorder produces a
+    // container the configured speech provider cannot decode.
+    if (transcript.trim() && !/^\[(background noise|silence|music)\]$/i.test(transcript.trim())) {
+      setProcessing(false);
+      setListening(false);
+      return;
+    }
+    const mimeType = recorderRef.current?.mimeType || "audio/wav";
+    const blob = pcmChunksRef.current.length > 0
+      ? encodeWav(pcmChunksRef.current, pcmSampleRateRef.current)
+      : new Blob(chunksRef.current, { type: mimeType });
     if (!blob.size) {
       setProcessing(false);
       setListening(false);
@@ -157,18 +217,30 @@ export function useBrowserSpeechCapture({
     setProcessing(true);
     try {
       const form = new FormData();
-      form.append("audio", blob, "answer.webm");
+      const extension = blob.type.includes("wav") ? "wav"
+        : mimeType.includes("mp4") || mimeType.includes("m4a") ? "m4a"
+          : mimeType.includes("ogg") ? "ogg"
+            : "webm";
+      form.append("audio", blob, `answer.${extension}`);
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
-      const body = (await res.json()) as { ok: boolean; text?: string; error?: string };
+      const responseText = await res.text();
+      let body: { ok: boolean; text?: string; error?: string };
+      try {
+        body = JSON.parse(responseText) as { ok: boolean; text?: string; error?: string };
+      } catch {
+        throw new Error(`Transcription service returned an invalid response (${res.status})`);
+      }
       if (body.ok && typeof body.text === "string" && body.text.trim()) {
         setTranscript(body.text.trim());
         setError(null);
       } else if (!transcript.trim()) {
-        setError(body.error || "Voice transcription unavailable. Please try again or type instead.");
+        setError(body.error || `Voice transcription unavailable (${res.status}). Please try again or type instead.`);
       }
-    } catch {
+    } catch (cause) {
       if (!transcript.trim()) {
-        setError("Couldn’t transcribe that recording. Please try again or type instead.");
+        setError(cause instanceof Error && cause.message
+          ? cause.message
+          : "Couldn’t transcribe that recording. Please try again or type instead.");
       }
     } finally {
       setProcessing(false);
@@ -189,6 +261,14 @@ export function useBrowserSpeechCapture({
     setTranscript("");
     setError(null);
     deliveredRef.current = null;
+    captureActiveRef.current = true;
+    speechSeenRef.current = false;
+    noSpeechTimerRef.current = setTimeout(() => {
+      if (!speechSeenRef.current && captureActiveRef.current) {
+        setError(errorMessage("no_speech"));
+        stop();
+      }
+    }, 10_000);
 
     const begin = async () => {
       try {
@@ -197,6 +277,8 @@ export function useBrowserSpeechCapture({
         recorderRef.current = null;
         streamRef.current = null;
         chunksRef.current = [];
+        pcmChunksRef.current = [];
+        stopPcmRef.current = null;
         manualStopRef.current = false;
         setProcessing(false);
 
@@ -207,6 +289,10 @@ export function useBrowserSpeechCapture({
           recognition.interimResults = true;
           recognition.lang = lang;
           recognition.maxAlternatives = 1;
+          recognition.onstart = () => {
+            setListening(true);
+            setError(null);
+          };
 
           recognition.onresult = (event) => {
             let finalText = "";
@@ -221,6 +307,14 @@ export function useBrowserSpeechCapture({
             setFinalTranscript(cleanFinal);
             setInterimTranscript(cleanInterim);
             setTranscript([cleanFinal, cleanInterim].filter(Boolean).join(" "));
+            if (cleanFinal || cleanInterim) {
+              speechSeenRef.current = true;
+              if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
+              if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                silenceTimerRef.current = setTimeout(() => {
+                if (captureActiveRef.current) stop();
+              }, 10_000);
+            }
           };
 
           recognition.onerror = (event) => {
@@ -229,46 +323,114 @@ export function useBrowserSpeechCapture({
               setError(null);
               return;
             }
-            if (!chunksRef.current.length) {
+            if (!recorderRef.current || recorderRef.current.state === "inactive") {
               setListening(false);
             }
             setError(errorMessage(normalised));
           };
 
           recognition.onend = () => {
-            if (!processing && (!recorderRef.current || recorderRef.current.state === "inactive")) {
+            const recorderActive = recorderRef.current && recorderRef.current.state !== "inactive";
+            if (!manualStopRef.current && captureActiveRef.current && !restartingRef.current) {
+              restartingRef.current = true;
+              window.setTimeout(() => {
+                restartingRef.current = false;
+                if (!manualStopRef.current && recognition && recognitionRef.current === recognition) {
+                  try {
+                    recognition.start();
+                  } catch {
+                    // The browser may already be restarting recognition.
+                  }
+                }
+              }, 120);
+              return;
+            }
+            if (!processing && !captureActiveRef.current && !recorderActive) {
               manualStopRef.current = false;
               setListening(false);
             }
           };
         }
 
+        // Start speech recognition directly from the button event. Waiting for
+        // getUserMedia() first can lose the browser's user-gesture permission
+        // and result in a recorder that captures audio without live words.
+        recognitionRef.current = recognition;
+        recognition?.start();
+
         if (recordingSupported) {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           streamRef.current = stream;
-          const recorder = new MediaRecorder(stream);
-          recorderRef.current = recorder;
-          recorder.ondataavailable = (event) => {
-            if (event.data.size > 0) chunksRef.current.push(event.data);
-          };
-          recorder.onstop = () => {
-            stream.getTracks().forEach((track) => track.stop());
-            streamRef.current = null;
-            void transcribeRecording();
-          };
-          recorder.start();
+          const AudioContextCtor = window.AudioContext ?? window.webkitAudioContext;
+          if (AudioContextCtor) {
+            // Capture raw PCM and send a finalized WAV. This avoids Safari's
+            // fragmented mp4 recordings, which ElevenLabs cannot decode.
+            const context = new AudioContextCtor();
+            await context.resume();
+            const source = context.createMediaStreamSource(stream);
+            const processor = context.createScriptProcessor(4096, 1, 1);
+            const silentOutput = context.createGain();
+            silentOutput.gain.value = 0;
+            pcmSampleRateRef.current = context.sampleRate;
+            processor.onaudioprocess = (event) => {
+              if (captureActiveRef.current) {
+                const samples = new Float32Array(event.inputBuffer.getChannelData(0));
+                pcmChunksRef.current.push(samples);
+              }
+            };
+            source.connect(processor);
+            processor.connect(silentOutput);
+            silentOutput.connect(context.destination);
+            audioContextRef.current = context;
+            audioProcessorRef.current = processor;
+            stopPcmRef.current = () => {
+              audioProcessorRef.current?.disconnect();
+              audioProcessorRef.current = null;
+              void audioContextRef.current?.close();
+              audioContextRef.current = null;
+              stream.getTracks().forEach((track) => track.stop());
+              streamRef.current = null;
+              void transcribeRecording();
+            };
+          } else if (typeof MediaRecorder !== "undefined") {
+            const recorder = new MediaRecorder(stream);
+            recorderRef.current = recorder;
+            recorder.ondataavailable = (event) => {
+              if (event.data.size > 0) chunksRef.current.push(event.data);
+            };
+            recorder.onerror = () => {
+              captureActiveRef.current = false;
+              setListening(false);
+              setError(errorMessage("audio_capture"));
+            };
+            recorder.onstop = () => {
+              stream.getTracks().forEach((track) => track.stop());
+              streamRef.current = null;
+              void transcribeRecording();
+            };
+            recorder.start(250);
+          } else {
+            throw new Error("No supported audio recorder is available");
+          }
         }
 
-        recognitionRef.current = recognition;
-        recognition?.start();
         return true;
-      } catch {
+      } catch (cause) {
+        captureActiveRef.current = false;
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
         streamRef.current?.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
+        audioProcessorRef.current?.disconnect();
+        audioProcessorRef.current = null;
+        void audioContextRef.current?.close();
+        audioContextRef.current = null;
+        stopPcmRef.current = null;
         recorderRef.current = null;
         setListening(false);
         setProcessing(false);
-        setError(errorMessage("unknown"));
+        const name = cause instanceof DOMException ? cause.name : "";
+        setError(errorMessage(name === "NotAllowedError" ? "not_allowed" : name === "NotFoundError" ? "audio_capture" : "unknown"));
         return false;
       }
     };
@@ -288,6 +450,9 @@ export function useBrowserSpeechCapture({
   useEffect(
     () => () => {
       manualStopRef.current = false;
+      captureActiveRef.current = false;
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
       recognitionRef.current?.abort();
       recognitionRef.current = null;
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
@@ -298,6 +463,11 @@ export function useBrowserSpeechCapture({
         }
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      audioProcessorRef.current?.disconnect();
+      audioProcessorRef.current = null;
+      void audioContextRef.current?.close();
+      audioContextRef.current = null;
+      stopPcmRef.current = null;
       recorderRef.current = null;
       streamRef.current = null;
     },

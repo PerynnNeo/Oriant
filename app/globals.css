@@ -23,6 +23,7 @@ input,textarea{font-family:inherit}
 @keyframes marq{to{transform:translateX(-50%)}}
 @keyframes pulse{0%{transform:scale(1);opacity:.55}70%{opacity:0}100%{transform:scale(2.4);opacity:0}}
 @keyframes wave{0%,100%{transform:scaleY(.28)}50%{transform:scaleY(1)}}
+.voice-recording-indicator{display:flex;align-items:center;gap:8px;width:max-content;padding:7px 10px;color:#a33f49;background:#fff4f5;border:1px solid #f0c1c7;border-radius:999px;font-size:12px;font-weight:700}.voice-recording-dot{width:8px;height:8px;border-radius:50%;background:#e34f5b;box-shadow:0 0 0 4px rgba(227,79,91,.14);animation:voice-recording-pulse 1s ease-in-out infinite}.voice-recording-bars{display:inline-flex;align-items:center;gap:2px;height:14px;margin-left:2px}.voice-recording-bars i{display:block;width:2px;height:7px;border-radius:2px;background:#e34f5b;animation:voice-recording-wave .8s ease-in-out infinite}.voice-recording-bars i:nth-child(2){animation-delay:.12s}.voice-recording-bars i:nth-child(3){height:12px;animation-delay:.24s}.voice-recording-bars i:nth-child(4){animation-delay:.36s}.voice-recording-bars i:nth-child(5){height:9px;animation-delay:.48s}@keyframes voice-recording-wave{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1.25)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @keyframes blink{50%{opacity:.15}}
 @keyframes spin{to{transform:rotate(360deg)}}

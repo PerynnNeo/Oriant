@@ -9,7 +9,7 @@ import type { RoleAHandoffEnvelope } from "./role-a-to-role-b-contract";
  * model output is parsed into them and never trusted raw.
  */
 
-export type ProviderName = "aiand" | "nosana" | "doubleword" | "daytona";
+export type ProviderName = "aiand" | "nosana" | "elevenlabs" | "doubleword" | "daytona";
 export type ProviderMode = "live" | "fixture";
 
 export interface ProviderRun {
@@ -209,6 +209,7 @@ export interface HistoryEntry { v: string; t: string }
 export interface CompanyReport {
   version: number;
   status: "draft" | "approved";
+  generatedAt?: string;
   approvedBy?: string;
   approvedAt?: string;
   exec: string;

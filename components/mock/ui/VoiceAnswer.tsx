@@ -25,9 +25,12 @@ export default function VoiceAnswer({
   onConfirm,
   onVoiceConfirm,
   onLiveTextChange,
+  onCaptureStateChange,
   confirmLabel = "Confirm answer",
   placeholder = "Or type your answer instead…",
   autoFocusMic = false,
+  autoStart = false,
+  autoAdvance = false,
   variant = "default",
   startMode = "idle",
 }: {
@@ -38,9 +41,12 @@ export default function VoiceAnswer({
   onVoiceConfirm?: (finalText: string) => void | Promise<void>;
   /** Receives interim speech text while the browser recognizer is listening. */
   onLiveTextChange?: (text: string) => void;
+  onCaptureStateChange?: (state: { listening: boolean; processing: boolean }) => void;
   confirmLabel?: string;
   placeholder?: string;
   autoFocusMic?: boolean;
+  autoStart?: boolean;
+  autoAdvance?: boolean;
   variant?: "default" | "embedded";
   startMode?: Stage;
 }) {
@@ -49,6 +55,8 @@ export default function VoiceAnswer({
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCaptureRef = useRef(false);
+  const autoStartedRef = useRef(false);
+  const autoSubmittedRef = useRef(false);
   const reduced = useReducedMotion();
   const {
     supported,
@@ -64,6 +72,10 @@ export default function VoiceAnswer({
     reset: resetVoice,
   } = useBrowserSpeechCapture({});
 
+  useEffect(() => {
+    onCaptureStateChange?.({ listening, processing });
+  }, [listening, onCaptureStateChange, processing]);
+
   /* Reset whenever the question (answer fixture) changes. */
   useEffect(() => {
     stopTimer();
@@ -71,6 +83,8 @@ export default function VoiceAnswer({
     setStage(startMode);
     setText(initialText);
     voiceCaptureRef.current = false;
+    autoStartedRef.current = false;
+    autoSubmittedRef.current = false;
     setElapsed(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answer, initialText, startMode]);
@@ -130,6 +144,20 @@ export default function VoiceAnswer({
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
   };
 
+  useEffect(() => {
+    if (autoStart && stage === "idle" && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      start();
+    }
+  }, [autoStart, stage]);
+
+  useEffect(() => {
+    if (autoAdvance && stage === "editable" && voiceCaptureRef.current && text.trim() && !autoSubmittedRef.current) {
+      autoSubmittedRef.current = true;
+      onConfirm(text.trim());
+    }
+  }, [autoAdvance, onConfirm, stage, text]);
+
   const stopEarly = () => {
     stopVoice();
     stopTimer();
@@ -183,6 +211,11 @@ export default function VoiceAnswer({
               <Square size={14} aria-hidden />
               Stop speaking
             </button>
+          ) : autoStart && stage === "idle" ? (
+            <div className="oa-btn oa-btn--primary oa-btn--lg" aria-live="polite" style={{ cursor: "default" }}>
+              <Mic size={17} aria-hidden />
+              Starting listening…
+            </div>
           ) : (
             <button
               type="button"
@@ -201,6 +234,7 @@ export default function VoiceAnswer({
             className={secondaryBtnClass}
             onClick={() => {
               if (!showComposer) setText("");
+              stopVoice();
               voiceCaptureRef.current = false;
               setStage("typing");
             }}
@@ -272,6 +306,16 @@ export default function VoiceAnswer({
                   </span>
                 ) : null}
               </div>
+
+              {isVoiceActive ? (
+                <div className="voice-recording-indicator" role="status" aria-live="polite">
+                  <span className="voice-recording-dot" aria-hidden="true" />
+                  <span>{listening ? "Recording your answer" : "Connecting to your microphone"}</span>
+                  <span className="voice-recording-bars" aria-hidden="true">
+                    {[1, 2, 3, 4, 5].map((bar) => <i key={bar} />)}
+                  </span>
+                </div>
+              ) : null}
 
               {isVoiceActive ? <Waveform active={stage === "listening"} height={40} bars={21} /> : null}
 

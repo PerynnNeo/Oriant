@@ -110,7 +110,11 @@ export async function speakAgent(text: string, onEnd?: () => void): Promise<void
  * never overlap when the user skips ahead.
  */
 export function speak(text: string, onEnd?: () => void): void {
-  if (!speechSupported() || !text.trim()) return;
+  if (!text.trim()) return;
+  if (!speechSupported()) {
+    onEnd?.();
+    return;
+  }
   cancelSpeech();
   const u = new SpeechSynthesisUtterance(text);
   const voice = pickVoice();

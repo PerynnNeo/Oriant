@@ -2,7 +2,7 @@
 .callLayout { width: min(1180px, 100%); margin: 0 auto; }
 .callWorkspace { display: grid; gap: 22px; }
 .callHeader { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.callColumns { display: grid; grid-template-columns: minmax(260px, .85fr) minmax(0, 1.15fr); gap: 24px; align-items: start; }
+.callColumns { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
 .callRail { display: grid; align-content: start; gap: 48px; padding-top: 8px; }
 .railBrand { display: flex; align-items: center; gap: 10px; color: #17233d; font-weight: 800; letter-spacing: -.02em; }
 .railMark { width: 33px; height: 33px; display: grid; place-items: center; color: white; background: #223778; border-radius: 11px; }
@@ -35,6 +35,7 @@
 .transcriptInterim { color: #b8c2dc !important; }
 .transcriptStatus { display: flex; align-items: center; gap: 8px; color: #c4cee4; font-size: 12px; }
 .statusDot { width: 8px; height: 8px; border-radius: 50%; background: #62d6b1; box-shadow: 0 0 0 5px rgba(98,214,177,.12); }
+.statusDotLive { background: #ff6b72; box-shadow: 0 0 0 5px rgba(255,107,114,.14); animation: voice-recording-pulse 1.1s ease-in-out infinite; }
 .questionPanel { position: relative; margin-top: 18px; padding: 34px; background: rgba(255,255,253,.86); border: 1px solid #d7dedb; border-radius: 26px; box-shadow: 0 18px 45px rgba(38,55,97,.08); }
 .questionNumber { position: absolute; top: 31px; right: 33px; width: 31px; height: 31px; display: grid; place-items: center; color: #3e58be; background: #e8edff; border-radius: 50%; font-weight: 800; }
 .sectionLabel { margin: 0 0 14px; color: #66805f; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
@@ -61,5 +62,6 @@
 .preCallCard .primaryAction { border: 0; cursor: pointer; }
 .preCallNote { margin: 16px 0 0; color: #8a95a6; font-size: 12px; }
 .completeCard { width: min(620px, 100%); margin: 7vh auto 0; padding: 48px; text-align: center; background: rgba(255,255,253,.9); border: 1px solid #d7dedb; border-radius: 28px; box-shadow: 0 20px 60px rgba(38,55,97,.1); }.completeIcon { width: 52px; height: 52px; display: grid; place-items: center; margin: 0 auto 22px; color: #167f73; background: #dff3eb; border-radius: 17px; }.completeCard h1 { margin: 12px 0; color: #111b30; font-size: 39px; line-height: 1; letter-spacing: -.05em; }.completeCard p:not(.eyebrow) { color: #748198; line-height: 1.6; }.primaryAction { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; padding: 13px 17px; color: white; background: #1d2b55; border-radius: 12px; font-weight: 750; text-decoration: none; }
-@media (max-width: 860px) { .callColumns { grid-template-columns: 1fr; }.transcriptPanel { min-height: 360px; }.transcriptStream { min-height: 190px; } }
+@media (max-width: 860px) { .callColumns { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .callLayout { width: 100%; }.callHeader { align-items: flex-start; }.stageList { grid-template-columns: 1fr; }.stageItem { font-size: 11px; line-height: 1.3; }.questionPanel { padding: 24px; }.questionNumber { top: 22px; right: 22px; } }
+@keyframes voice-recording-pulse { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.35); opacity: 1; } }
