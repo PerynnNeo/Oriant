@@ -68,13 +68,14 @@ export default function SideNav({ ready }: { ready: boolean }) {
                     || child.route === "/app/discovery/review"
                   );
                   const childActive = pathname === child.route;
-                  if (callLocked) {
+                  const childEnabled = childUnlocked && !callLocked;
+                  if (!childEnabled) {
                     return (
                       <span
                         key={child.route}
                         className={`${styles.navChild} ${styles.navChildLocked}`}
                         aria-disabled="true"
-                        title="Available after your call"
+                        title={callLocked ? "Available after your call" : "Complete the earlier step to unlock this"}
                       >
                         {child.label}
                       </span>
@@ -86,9 +87,8 @@ export default function SideNav({ ready }: { ready: boolean }) {
                       href={child.route}
                       className={`${styles.navChild} ${
                         childActive ? styles.navChildActive : ""
-                      } ${!childUnlocked ? styles.navChildLocked : ""}`}
+                      }`}
                       aria-current={childActive ? "page" : undefined}
-                      tabIndex={childUnlocked ? 0 : -1}
                     >
                       {child.label}
                     </Link>

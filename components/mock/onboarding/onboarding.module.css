@@ -328,6 +328,26 @@
   background: var(--oa-surface);
 }
 
+.teamFields {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(240px, 1fr);
+  gap: 14px;
+}
+
+.approvalRows { display: grid; gap: 8px; }
+.departmentCell { display: grid; gap: 6px; }
+.approvalRowHeader,
+.approvalRow { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(200px, 1fr) auto; gap: 8px; align-items: center; }
+.approvalRowHeader { color: var(--oa-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.removeRow { border: 0; background: transparent; color: var(--oa-muted); cursor: pointer; font-size: 12px; padding: 8px 2px; }
+.removeRow:hover { color: var(--oa-red-ink); }
+
+@media (max-width: 700px) {
+  .teamFields { grid-template-columns: 1fr; }
+  .approvalRowHeader { display: none; }
+  .approvalRow { grid-template-columns: 1fr; }
+}
+
 .modeCard {
   height: 100%;
   align-items: stretch;

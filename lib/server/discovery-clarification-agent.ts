@@ -49,6 +49,27 @@ function fallbackQuestions(db: Db): DiscoveryClarificationQuestion[] {
     helperText: "Think about what arrives or changes first.",
     examples: ["A customer email arrives", "A booking is requested", "An invoice becomes overdue"],
   });
+  if (!interview.workflow_bottleneck) questions.push({
+    id: "clarify_bottleneck",
+    question: "Which part of the workflow takes the most time or regularly gets stuck?",
+    reason: "The report needs a specific bottleneck before it can identify the best automation opportunity.",
+    helperText: "Name the step that causes delays, repeated checking, or the most frustration.",
+    examples: ["Copying details between tools", "Waiting for customer replies", "Checking availability", "Following up manually"],
+  });
+  if (!interview.workflow_frequency) questions.push({
+    id: "clarify_frequency",
+    question: "How often does this workflow happen?",
+    reason: "Frequency helps estimate the operational impact of improving it.",
+    helperText: "A rough daily, weekly, or monthly estimate is enough.",
+    examples: ["Several times a day", "About 20 times a week", "At month end"],
+  });
+  if (!interview.handoffs && !interview.workflow_tool_switches) questions.push({
+    id: "clarify_handoffs",
+    question: "Who handles this work next, or which tool do you switch to?",
+    reason: "Handoffs and tool switches reveal where information can be lost or work repeated.",
+    helperText: "Mention the next person, team, or app involved after the first step.",
+    examples: ["Coordinator to technician", "Gmail to Calendar", "Sales to Finance"],
+  });
   if (!interview.human_decisions) questions.push({
     id: "clarify_human_boundary",
     question: "Which part should always wait for your approval?",
@@ -86,7 +107,7 @@ export async function generateDiscoveryClarifications(db: Db): Promise<Clarifica
     reasoningEffort: "none",
     timeoutMs: 12_000,
     system:
-      "You are Oriant's final Discovery Review Agent. Read all onboarding answers and all interview answers. Decide whether the workflow evidence is clear enough to draft a useful company report. Ask zero to four follow-up questions only when an unclear or conflicting detail would materially affect the workflow, pain point, automation scope, trigger, inputs, outcome, or human approval boundary. Do not ask for information already present. Do not ask generic company questions. Return only JSON.",
+      "You are Oriant's final Discovery Review Agent. Read all onboarding answers and all interview answers. Before the company report, check coverage of the workflow trigger, frequency, main steps, biggest bottleneck, handoffs or tool switches, required inputs, human approval boundaries, desired outcome, and preferred automation level. Decide whether the workflow evidence is clear enough to draft a useful company report. Ask zero to four follow-up questions only when an unclear or conflicting detail would materially affect one of those areas. Do not ask for information already present. Do not ask generic company questions. Return only JSON.",
     user:
       `Onboarding answers:\n${JSON.stringify(Object.fromEntries(Object.entries(session.answers).map(([id, answer]) => [id, answer.value])), null, 2)}\n\n` +
       `Interview answers:\n${JSON.stringify(db.call.answers, null, 2)}\n\n` +

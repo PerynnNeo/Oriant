@@ -54,7 +54,9 @@ export function buildDiscoveryHandoff(db: Db) {
   // Clarification answers explain or correct the interview; they should not
   // be mistaken for workflow fields just because an id contains a keyword.
   const steps = firstDiscoveryAnswer(interviewAnswers, ["steps"]);
+  const bottleneck = firstDiscoveryAnswer(interviewAnswers, ["bottleneck", "pain_point", "friction"]);
   const trigger = firstDiscoveryAnswer(interviewAnswers, ["trigger"]);
+  const frequency = firstDiscoveryAnswer(interviewAnswers, ["frequency", "volume"]);
   const inputs = firstDiscoveryAnswer(interviewAnswers, ["input", "document", "data_inputs"]);
   const outputs = firstDiscoveryAnswer(interviewAnswers, ["success", "outcome"]);
   const handoffs = firstDiscoveryAnswer(interviewAnswers, ["handoff"]);
@@ -65,6 +67,8 @@ export function buildDiscoveryHandoff(db: Db) {
     !currentWorkflow && "Current workflow summary is missing.",
     !trigger && "Workflow trigger is still missing.",
     !steps && "Ordered workflow steps are still incomplete.",
+    !bottleneck && "The main workflow bottleneck is still missing.",
+    !frequency && "Workflow frequency is still missing.",
     !inputs && "The information needed to run this workflow is still missing.",
     !decisions && "Human approval boundaries are still missing.",
   ].filter((item): item is string => Boolean(item));
@@ -96,7 +100,7 @@ export function buildDiscoveryHandoff(db: Db) {
         selected_tools: tools,
         employee_emails: session?.organization.employeeEmails ?? [],
         department_approvals: session?.organization.departmentApprovals ?? [],
-        ...(session?.organization.shape !== "solo" ? { approval_owner: session?.organization.approvalOwner ?? null } : {}),
+        approval_owner: session?.organization.approvalOwner ?? null,
       },
       interview: {
         answered_count: Object.keys(interviewAnswers).length,
@@ -131,6 +135,8 @@ export function buildDiscoveryHandoff(db: Db) {
         workflow_name: repetitiveTask || null,
         current_workflow_summary: currentWorkflow || null,
         trigger: trigger || null,
+        bottleneck: bottleneck || null,
+        frequency: frequency || null,
         ordered_steps: orderedSteps(currentWorkflow, steps),
         inputs: inputs ? [inputs] : [],
         outputs: outputs ? [outputs] : [],

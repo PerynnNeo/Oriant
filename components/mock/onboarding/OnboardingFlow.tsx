@@ -76,6 +76,10 @@ export default function OnboardingFlow() {
   const setBusinessArea = useDemoStore((s) => s.setBusinessArea);
   const setRepetitiveTask = useDemoStore((s) => s.setRepetitiveTask);
   const setCurrentWorkflow = useDemoStore((s) => s.setCurrentWorkflow);
+  const setEmployeeCount = useDemoStore((s) => s.setEmployeeCount);
+  const setEmployeeEmails = useDemoStore((s) => s.setEmployeeEmails);
+  const setApprovalOwner = useDemoStore((s) => s.setApprovalOwner);
+  const setDepartmentApprovals = useDemoStore((s) => s.setDepartmentApprovals);
   const applyDemoCompany = useDemoStore((s) => s.useDemoCompany);
   const toggleTool = useDemoStore((s) => s.toggleTool);
   const captureSection = useDemoStore((s) => s.captureSection);
@@ -239,13 +243,8 @@ export default function OnboardingFlow() {
       return;
     }
     captureSection("team");
-    void persistPatch({ workflowBuilder: builder });
-  };
-
-  const onChangeBuilderAccess = (access: BuilderAccess) => {
-    setBuilderAccess(access);
-    captureSection("team");
-    void persistPatch({ builderAccess: access });
+    setBuilderAccess(null);
+    void persistPatch({ workflowBuilder: builder, builderAccess: null });
   };
 
   const onChangeAutomationScope = (scope: AutomationScope) => {
@@ -287,7 +286,42 @@ export default function OnboardingFlow() {
   const onChangeOrganizationShape = (shape: typeof onboarding.organizationShape) => {
     setOrganizationShape(shape);
     captureSection("team");
-    void persistPatch({ organizationShape: shape });
+    if (shape === "solo") {
+      setEmployeeCount("");
+      setEmployeeEmails([]);
+      setApprovalOwner("You");
+      void persistPatch({
+        organizationShape: shape,
+        employeeCount: null,
+        approvalOwner: "You",
+        employeeEmails: [],
+        departmentApprovals: [],
+      });
+      return;
+    }
+    setApprovalOwner("");
+    void persistPatch({ organizationShape: shape, approvalOwner: "" });
+  };
+
+  const onChangeApprovalOwner = (owner: string) => {
+    setApprovalOwner(owner);
+    void persistPatch({ approvalOwner: owner });
+  };
+
+  const onChangeDepartmentApprovals = (items: DepartmentApproval[]) => {
+    setDepartmentApprovals(items);
+    void persistPatch({ departmentApprovals: items });
+  };
+
+  const onChangeEmployeeCount = (count: string) => {
+    setEmployeeCount(count);
+    const parsed = Number.parseInt(count, 10);
+    void persistPatch({ employeeCount: Number.isFinite(parsed) && parsed > 0 ? parsed : null });
+  };
+
+  const onChangeEmployeeEmails = (emails: string[]) => {
+    setEmployeeEmails(emails);
+    void persistPatch({ employeeEmails: emails });
   };
 
   const onUseDemo = () => {
@@ -295,7 +329,8 @@ export default function OnboardingFlow() {
     setMode("assist");
     setOrganizationShape("solo");
     setWorkflowBuilder("self");
-    setBuilderAccess("workflows_only");
+    setBuilderAccess(null);
+    setApprovalOwner("You");
     setAutomationScope("focus_area");
     setBusinessArea("Operations");
     setRepetitiveTask("Rescheduling customer appointments over the phone");
@@ -308,7 +343,7 @@ export default function OnboardingFlow() {
     void persistPatch({
       mode: "assist",
       workflowBuilder: "self",
-      builderAccess: "workflows_only",
+      builderAccess: null,
       automationScope: "focus_area",
       businessArea: "Operations",
       repetitiveTask: "Rescheduling customer appointments over the phone",
@@ -316,7 +351,7 @@ export default function OnboardingFlow() {
       intro: "I run BrightPath Home Services in Singapore, providing residential maintenance and handling around 650 customer requests a month. Too much of my day goes into sorting Gmail and WhatsApp messages by hand and rescheduling appointments over the phone.",
       organizationShape: "solo",
       employeeCount: null,
-      approvalOwner: "",
+      approvalOwner: "You",
       employeeEmails: [],
       departmentApprovals: [],
       selectedToolIds: [
@@ -373,7 +408,6 @@ export default function OnboardingFlow() {
       !onboarding.organizationShape
       || !onboarding.workflowBuilder
       || !onboarding.automationScope
-      || (onboarding.workflowBuilder === "invite" && !onboarding.builderAccess)
     ));
 
   const runBlueprintAction = async (action: "generate" | "approve" | "handoff") => {
@@ -504,14 +538,20 @@ export default function OnboardingFlow() {
                   <ModeStep
                     organizationShape={onboarding.organizationShape}
                     workflowBuilder={onboarding.workflowBuilder}
-                    builderAccess={onboarding.builderAccess}
                     automationScope={onboarding.automationScope}
+                    employeeCount={onboarding.employeeCount}
+                    employeeEmails={employeeEmails}
+                    approvalOwner={onboarding.approvalOwner ?? ""}
+                    departmentApprovals={departmentApprovals}
                     usedDemo={onboarding.usedDemoCompany}
                     selectedToolIds={onboarding.selectedToolIds}
                     onOrganizationShapeChange={onChangeOrganizationShape}
                     onWorkflowBuilderChange={onChangeWorkflowBuilder}
-                    onBuilderAccessChange={onChangeBuilderAccess}
                     onAutomationScopeChange={onChangeAutomationScope}
+                    onEmployeeCountChange={onChangeEmployeeCount}
+                    onEmployeeEmailsChange={onChangeEmployeeEmails}
+                    onApprovalOwnerChange={onChangeApprovalOwner}
+                    onDepartmentApprovalsChange={onChangeDepartmentApprovals}
                     onUseDemo={onUseDemo}
                   />
                 )}

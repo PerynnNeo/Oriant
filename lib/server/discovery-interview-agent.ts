@@ -26,7 +26,7 @@ const RESPONSE_SCHEMA = {
     questions: {
       type: "array",
       minItems: 4,
-      maxItems: 7,
+    maxItems: 8,
       items: {
         type: "object",
         additionalProperties: false,
@@ -79,6 +79,13 @@ function fixtureQuestions(session: OnboardingSession): DiscoveryInterviewQuestio
       examples: ["Inbox checked", "Calendar updated", "Customer confirmed", "Spreadsheet amended"],
     },
     {
+      id: "workflow_bottleneck",
+      question: `Which part of ${task} takes the most time or regularly gets stuck?`,
+      reason: "The main bottleneck shows where automation could create the most useful relief.",
+      helperText: "Name the step that causes delays, repeated checking, or the most frustration.",
+      examples: ["Waiting for a reply", "Copying details between tools", "Checking availability", "Following up manually"],
+    },
+    {
       id: "handoffs",
       question: withTeam
         ? `Who touches ${task} from start to finish?`
@@ -101,6 +108,13 @@ function fixtureQuestions(session: OnboardingSession): DiscoveryInterviewQuestio
       examples: ["Refunds above a limit", "Final price approval", "Schedule changes after confirmation"],
     },
     {
+      id: "workflow_frequency",
+      question: `How often does ${task} happen?`,
+      reason: "Frequency helps Oriant estimate the operational impact of improving this workflow.",
+      helperText: "A rough estimate is enough: per day, per week, or per month.",
+      examples: ["Several times a day", "About 20 times a week", "At month end", "Only when a customer requests it"],
+    },
+    {
       id: "workflow_success",
       question: `What would a good outcome look like if ${task} worked better?`,
       reason: "Oriant needs a clear success target before recommending automation.",
@@ -119,7 +133,7 @@ function fixtureQuestions(session: OnboardingSession): DiscoveryInterviewQuestio
     });
   }
 
-  return questions.slice(0, 6);
+  return questions.slice(0, 8);
 }
 
 export async function generateDiscoveryInterviewQuestions(
@@ -157,7 +171,7 @@ async function generateInterviewResult(session: OnboardingSession): Promise<Inte
     system:
       "You are Oriant's Discovery Interview Agent. " +
       "The owner has already completed onboarding. Read every onboarding answer before writing questions. Generate only the next 4 to 7 follow-up interview questions needed to understand the selected workflow well enough to identify the real pain point, what can be automated, and what must remain human-controlled. " +
-      "Do not repeat or paraphrase questions already answered in onboarding. Ask one missing detail per question, in plain business language, and keep every question specific to the selected workflow. Cover the trigger, real steps, bottleneck or pain point, tools and inputs, human approval boundaries, desired outcome, and preferred level of automation when those details are missing. Return only a JSON object with a questions array; do not use markdown or code fences.",
+      "Do not repeat or paraphrase questions already answered in onboarding. Ask one missing detail per question, in plain business language, and keep every question specific to the selected workflow. The final question set must cover, when missing: what triggers the work, the main steps, the biggest bottleneck, how often it happens, handoffs between people or tool switches, required inputs, human approval boundaries, desired outcome, and preferred automation level. Return only a JSON object with a questions array; do not use markdown or code fences.",
     user:
       `Organization shape: ${session.organization.shape}\n` +
       `Business summary: ${typeof session.answers.company_intro?.value === "string" ? session.answers.company_intro.value : ""}\n` +
@@ -166,7 +180,7 @@ async function generateInterviewResult(session: OnboardingSession): Promise<Inte
       `Current workflow summary: ${typeof session.answers.current_workflow?.value === "string" ? session.answers.current_workflow.value : ""}\n` +
       `Onboarding automation preference: ${typeof session.answers.automation_mode?.value === "string" ? session.answers.automation_mode.value : ""}\n` +
       `Selected tools: ${session.selectedToolIds.join(", ")}\n` +
-      "Generate tailored interview cards. The end goal is a grounded workflow description: where the work hurts today, what starts it, what happens, where it can safely be automated, and where a person must decide. Avoid generic business-strategy questions.",
+      "Generate tailored interview cards. The end goal is a grounded workflow description: where the work hurts today, what starts it, how often it happens, what happens next, where it gets stuck, who or which tools it moves between, what information is needed, where it can safely be automated, and where a person must decide. Avoid generic business-strategy questions.",
   });
 
   const rawQuestions = result.data && typeof result.data === "object"
