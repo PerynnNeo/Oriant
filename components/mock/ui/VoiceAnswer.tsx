@@ -26,6 +26,7 @@ export default function VoiceAnswer({
   onVoiceConfirm,
   onLiveTextChange,
   onCaptureStateChange,
+  onNoSpeech,
   confirmLabel = "Confirm answer",
   placeholder = "Or type your answer instead…",
   autoFocusMic = false,
@@ -33,6 +34,7 @@ export default function VoiceAnswer({
   autoAdvance = false,
   variant = "default",
   startMode = "idle",
+  promptText,
 }: {
   /** The hardcoded transcript revealed by the simulated voice capture. */
   answer: string;
@@ -42,6 +44,8 @@ export default function VoiceAnswer({
   /** Receives interim speech text while the browser recognizer is listening. */
   onLiveTextChange?: (text: string) => void;
   onCaptureStateChange?: (state: { listening: boolean; processing: boolean }) => void;
+  /** Lets a guided call respond conversationally when the mic hears nothing. */
+  onNoSpeech?: () => void | Promise<void>;
   confirmLabel?: string;
   placeholder?: string;
   autoFocusMic?: boolean;
@@ -49,6 +53,7 @@ export default function VoiceAnswer({
   autoAdvance?: boolean;
   variant?: "default" | "embedded";
   startMode?: Stage;
+  promptText?: string;
 }) {
   const [stage, setStage] = useState<Stage>(startMode);
   const [text, setText] = useState(initialText);
@@ -57,6 +62,7 @@ export default function VoiceAnswer({
   const voiceCaptureRef = useRef(false);
   const autoStartedRef = useRef(false);
   const autoSubmittedRef = useRef(false);
+  const noSpeechNotifiedRef = useRef(false);
   const reduced = useReducedMotion();
   const {
     supported,
@@ -67,10 +73,11 @@ export default function VoiceAnswer({
     finalTranscript,
     interimTranscript,
     error,
+    clearError,
     start: startVoice,
     stop: stopVoice,
     reset: resetVoice,
-  } = useBrowserSpeechCapture({});
+  } = useBrowserSpeechCapture({ promptText: promptText ?? answer });
 
   useEffect(() => {
     onCaptureStateChange?.({ listening, processing });
@@ -85,6 +92,7 @@ export default function VoiceAnswer({
     voiceCaptureRef.current = false;
     autoStartedRef.current = false;
     autoSubmittedRef.current = false;
+    noSpeechNotifiedRef.current = false;
     setElapsed(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answer, initialText, startMode]);
@@ -120,6 +128,13 @@ export default function VoiceAnswer({
       }
     }
   }, [error, listening, processing, stage, transcript]);
+
+  useEffect(() => {
+    if (error?.toLowerCase().includes("no speech") && !noSpeechNotifiedRef.current) {
+      noSpeechNotifiedRef.current = true;
+      void onNoSpeech?.();
+    }
+  }, [error, onNoSpeech]);
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -323,7 +338,10 @@ export default function VoiceAnswer({
                 className="oa-textarea"
                 value={text}
                 placeholder={isVoiceActive ? "Start speaking and your words will appear here…" : placeholder}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  clearError();
+                }}
                 rows={isVoiceActive ? 4 : 3}
                 aria-label={isVoiceActive ? "Live transcript" : "Your answer"}
               />
@@ -374,7 +392,7 @@ export default function VoiceAnswer({
                 </div>
               ) : null}
 
-              {error ? <p className="oa-sub" style={{ color: "var(--oa-red-ink)", margin: 0 }}>{error}</p> : null}
+              {error && !text.trim() ? <p className="oa-sub" style={{ color: "var(--oa-red-ink)", margin: 0 }}>{error}</p> : null}
             </motion.div>
           ) : null}
         </AnimatePresence>

@@ -121,12 +121,27 @@ function normaliseError(error?: string): SpeechError {
   }
 }
 
+function normaliseWords(value: string): string[] {
+  return value.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+}
+
+function isLikelyPromptEcho(transcript: string, prompt: string): boolean {
+  const words = normaliseWords(transcript);
+  const promptWords = normaliseWords(prompt);
+  if (!words.length || !promptWords.length) return false;
+  const promptSet = new Set(promptWords);
+  const overlap = words.filter((word) => promptSet.has(word)).length / words.length;
+  return words.length <= promptWords.length + 8 && overlap >= 0.72;
+}
+
 export function useBrowserSpeechCapture({
   lang = "en-US",
   onFinalTranscript,
+  promptText = "",
 }: {
   lang?: string;
   onFinalTranscript?: (transcript: string) => void | Promise<void>;
+  promptText?: string;
 }) {
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -201,6 +216,16 @@ export function useBrowserSpeechCapture({
     if (transcript.trim() && !/^\[(background noise|silence|music)\]$/i.test(transcript.trim())) {
       setProcessing(false);
       setListening(false);
+      setError(null);
+      return;
+    }
+    // The free browser recognizer is the primary STT path. Do not silently
+    // send an empty recording to an unavailable server workload when it has
+    // already failed to produce a result.
+    if (RecognitionCtor) {
+      setProcessing(false);
+      setListening(false);
+      if (!transcript.trim()) setError(errorMessage("no_speech"));
       return;
     }
     const mimeType = recorderRef.current?.mimeType || "audio/wav";
@@ -246,7 +271,7 @@ export function useBrowserSpeechCapture({
       setProcessing(false);
       setListening(false);
     }
-  }, [transcript]);
+  }, [RecognitionCtor, transcript]);
 
   const start = useCallback(() => {
     if (!RecognitionCtor && !recordingSupported) {
@@ -304,10 +329,17 @@ export function useBrowserSpeechCapture({
             }
             const cleanFinal = finalText.trim();
             const cleanInterim = interimText.trim();
+            if (isLikelyPromptEcho([cleanFinal, cleanInterim].filter(Boolean).join(" "), promptText)) {
+              setFinalTranscript("");
+              setInterimTranscript("");
+              setTranscript("");
+              return;
+            }
             setFinalTranscript(cleanFinal);
             setInterimTranscript(cleanInterim);
             setTranscript([cleanFinal, cleanInterim].filter(Boolean).join(" "));
             if (cleanFinal || cleanInterim) {
+              setError(null);
               speechSeenRef.current = true;
               if (noSpeechTimerRef.current) clearTimeout(noSpeechTimerRef.current);
               if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -359,7 +391,13 @@ export function useBrowserSpeechCapture({
         recognition?.start();
 
         if (recordingSupported) {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
           streamRef.current = stream;
           const AudioContextCtor = window.AudioContext ?? window.webkitAudioContext;
           if (AudioContextCtor) {
@@ -437,7 +475,7 @@ export function useBrowserSpeechCapture({
 
     void begin();
     return true;
-  }, [RecognitionCtor, lang, recordingSupported, processing, transcribeRecording]);
+  }, [RecognitionCtor, lang, promptText, recordingSupported, processing, transcribeRecording]);
 
   useEffect(() => {
     const clean = transcript.trim();
@@ -483,6 +521,7 @@ export function useBrowserSpeechCapture({
     finalTranscript,
     interimTranscript,
     error,
+    clearError: () => setError(null),
     start,
     stop,
     reset,

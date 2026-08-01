@@ -25,13 +25,21 @@ function toQuestion(item: { id: string; question: string; reason?: string; helpe
   return { id: item.id, section: "Your workflow interview", question: item.question, helper: item.helperText ?? item.reason, examples: item.examples };
 }
 
+function sayAndWait(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    void speakAgent(text, resolve);
+  });
+}
+
 function derivePatch(questionId: string, answer: string) {
   const lower = answer.toLowerCase();
   if (questionId === "organization_shape") {
     return { organizationShape: /just me|solo|only me|myself/.test(lower) ? "solo" : "owner_with_team" };
   }
   if (questionId === "setup_builder") {
-    return { workflowBuilder: /someone|invite|team|other/.test(lower) ? "invite" : "self" };
+    const wantsSomeoneElse = /someone else|invite|teammate|another person|they can|delegate|operator/.test(lower);
+    const clearlySelf = /my own|myself|for me|i(?:'ll| will) build|i build|own workflow/.test(lower);
+    return { workflowBuilder: wantsSomeoneElse && !clearlySelf ? "invite" : "self" };
   }
   if (questionId === "automation_scope") {
     const automationScope = /whole|entire|everything|business/.test(lower)
@@ -58,7 +66,7 @@ export default function VoiceDiscoveryCall() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [loadingNext, setLoadingNext] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [questionReady, setQuestionReady] = useState(false);
+  const [readyQuestionId, setReadyQuestionId] = useState<string | null>(null);
   const [micReady, setMicReady] = useState(false);
   const greetedRef = useRef(false);
 
@@ -68,9 +76,14 @@ export default function VoiceDiscoveryCall() {
   }, [activeQuestion?.id]);
 
   useEffect(() => {
-    setQuestionReady(false);
+    setReadyQuestionId(null);
     if (!callStarted || !micReady || !activeQuestion || stage === "complete") return;
-    const startListeningAfterQuestion = () => setQuestionReady(true);
+    const startListeningAfterQuestion = () => {
+      // Let the last prompt audio leave the speakers before opening STT.
+      // Safari can deliver the final speaker buffer to SpeechRecognition
+      // after audio.onended, so leave a short echo-drain window.
+      window.setTimeout(() => setReadyQuestionId(activeQuestion.id), 1000);
+    };
     if (!greetedRef.current) {
       greetedRef.current = true;
       void speakAgent("Hello, I’m Oriant. I’ll ask a few questions about your business and listen for what could be made easier. Let’s start.", () => {
@@ -162,36 +175,51 @@ export default function VoiceDiscoveryCall() {
       ]);
 
       // Give the Discovery Agent one chance to close a material gap before
-      // moving on. Follow-ups are saved back to the original question ID.
+      // moving on. This is deliberately best-effort: the next call question
+      // must not wait on a slow model request. The clarification stage can
+      // catch anything that needs more detail later.
       if (!question.parentQuestionId && (stage === "onboarding" || stage === "interview")) {
-        const followUpResponse = await fetch("/api/discovery/follow-up", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage, questionId: question.id, question: question.question, answer: trimmed }),
-        });
-        if (followUpResponse.ok) {
-          const followUp = await followUpResponse.json() as { question?: string | null; helperText?: string; examples?: string[] };
-          if (followUp.question?.trim()) {
-            const followUpQuestion: CallQuestion = {
-              id: `${question.id}__follow_up`,
-              parentQuestionId: question.id,
-              section: question.section,
-              question: followUp.question.trim(),
-              helper: followUp.helperText?.trim() || "Add the detail that would make this workflow clearer.",
-              examples: followUp.examples ?? [],
-            };
-            setQuestions((current) => [
-              ...current.slice(0, activeIndex + 1),
-              followUpQuestion,
-              ...current.slice(activeIndex + 1),
-            ]);
-            setAnswers((current) => ({ ...current, [question.id]: trimmed }));
-            setActiveIndex((index) => index + 1);
-            return;
+        const followUpController = new AbortController();
+        const followUpTimeout = window.setTimeout(() => followUpController.abort(), 900);
+        try {
+          const followUpResponse = await fetch("/api/discovery/follow-up", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage, questionId: question.id, question: question.question, answer: trimmed }),
+            signal: followUpController.signal,
+          });
+          if (followUpResponse.ok) {
+            const followUp = await followUpResponse.json() as { question?: string | null; helperText?: string; examples?: string[] };
+            if (followUp.question?.trim()) {
+              const followUpQuestion: CallQuestion = {
+                id: `${question.id}__follow_up`,
+                parentQuestionId: question.id,
+                section: question.section,
+                question: followUp.question.trim(),
+                helper: followUp.helperText?.trim() || "Add the detail that would make this workflow clearer.",
+                examples: followUp.examples ?? [],
+              };
+              setQuestions((current) => [
+                ...current.slice(0, activeIndex + 1),
+                followUpQuestion,
+                ...current.slice(activeIndex + 1),
+              ]);
+              setAnswers((current) => ({ ...current, [question.id]: trimmed }));
+              await sayAndWait("Okay, thank you.");
+              setActiveIndex((index) => index + 1);
+              return;
+            }
           }
+        } catch {
+          // Follow-up generation is optional and must never hold up the call.
+        } finally {
+          window.clearTimeout(followUpTimeout);
         }
       }
 
+      // Keep the guided call feeling like a conversation rather than a form.
+      // The next question is spoken after this acknowledgement completes.
+      await sayAndWait("Okay, thank you.");
       if (activeIndex < questions.length - 1) {
         setActiveIndex((index) => index + 1);
       } else if (stage === "onboarding") {
@@ -307,10 +335,11 @@ export default function VoiceDiscoveryCall() {
               answer={activeQuestion?.question ?? ""}
                 onConfirm={(answer) => void saveAnswer(activeQuestion!, answer)}
                 onLiveTextChange={setLiveTranscript}
+                onNoSpeech={() => speakAgent("I didn't catch your answer clearly. Could you say that again?")}
                 // Do not open the microphone while Oriant is still speaking
                 // the question. Otherwise the recording contains the prompt
-                // and ElevenLabs may return "[background noise]".
-                autoStart={callStarted && questionReady}
+                // and the STT provider may return "[background noise]".
+                autoStart={callStarted && readyQuestionId === activeQuestion?.id}
                 autoAdvance
               confirmLabel={loadingNext ? "Saving…" : "Save answer"}
               placeholder="Or type your answer here…"
