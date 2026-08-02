@@ -16,6 +16,19 @@ function orgExternalKey(db: Db): string {
   return `mock:${db.org.name}:${db.org.owner}`.toLowerCase();
 }
 
+/** Remove the current demo organization and its cascaded onboarding data. */
+export async function resetDemoDataInSupabase(db: Db): Promise<void> {
+  assertSupabaseConfigured();
+  const supabase = getSupabaseAdmin();
+  if (!supabase) return;
+
+  const result = await supabase
+    .from("organizations")
+    .delete()
+    .eq("external_key", orgExternalKey(db));
+  if (result.error) throw result.error;
+}
+
 function approvalOwnerForOrganization(session: OnboardingSession | null, ownerName: string) {
   if (!session) return null;
 

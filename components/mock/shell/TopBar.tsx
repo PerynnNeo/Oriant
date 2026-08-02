@@ -46,6 +46,7 @@ export default function TopBar({ ready }: { ready: boolean }) {
   const setPresentation = useAutopilot((s) => s.setPresentation);
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -65,7 +66,25 @@ export default function TopBar({ ready }: { ready: boolean }) {
   const activePhase = ready
     ? PROGRESS_PHASES.find((p) => phaseStatus(p, journey) === "active") ??
       PROGRESS_PHASES[PROGRESS_PHASES.length - 1]
-    : PROGRESS_PHASES[0];
+      : PROGRESS_PHASES[0];
+
+  const handleResetDemo = async () => {
+    if (resetting) return;
+    setResetting(true);
+    try {
+      const response = await fetch("/api/reset", { method: "POST" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? "Could not reset the Supabase demo data.");
+      }
+      resetDemo();
+      router.push("/app/onboarding");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not reset the demo.");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   return (
     <header className={styles.topbar}>
@@ -136,12 +155,12 @@ export default function TopBar({ ready }: { ready: boolean }) {
                 className={styles.demoMenuItem}
                 onClick={() => {
                   setMenuOpen(false);
-                  resetDemo();
-                  router.push("/app/onboarding");
+                  void handleResetDemo();
                 }}
+                disabled={resetting}
               >
                 <RotateCcw size={14} aria-hidden style={{ color: "var(--oa-red-ink)" }} />
-                Reset demo
+                {resetting ? "Resetting demo…" : "Reset demo"}
               </button>
               <hr className="oa-divider" style={{ margin: "6px 0" }} />
               <p className={`oa-micro ${styles.demoMenuLabel}`}>Fast-forward to…</p>
