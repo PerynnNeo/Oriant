@@ -17,12 +17,13 @@ import FinalCTA from "@/components/landing/FinalCTA";
 import LandingFooter from "@/components/landing/LandingFooter";
 import DemoGateModal from "@/components/landing/DemoGateModal";
 import DemoGateController from "@/components/landing/DemoGateController";
+import { isMarketingSite } from "@/lib/site-mode";
 
 export default function Page() {
   return (
     <div className="lp">
       <SmoothScroll />
-      <DemoGateController />
+      <DemoGateController gateEnabled={isMarketingSite()} />
       <DemoGateModal />
       <LandingMotionProvider>
         <LandingNavbar />

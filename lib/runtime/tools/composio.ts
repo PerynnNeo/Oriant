@@ -170,6 +170,57 @@ export class ComposioToolsConfigError extends Error {
   }
 }
 
+/* ═══════════════════ Configuration reads (SDK-free on purpose) ═══════════════════ */
+
+/**
+ * The Composio API key, or a named throw.
+ *
+ * LIVES HERE, NOT IN ./composio-sdk.ts, because it needs nothing from the SDK —
+ * it is an environment read that throws the error class defined above. It used
+ * to live beside the SDK import, which put `@composio/core` (ESM-only) into the
+ * module graph of everything that only wanted to ask "is the key set?" —
+ * including lib/runtime/session.ts, which lib/runtime/verify/m3.ts imports, so
+ * the whole M3 verify target inherited a require() of an ESM entry and died
+ * before its first check. The seam file keeps a re-export, so the boundary
+ * still has one crossing point for SDK consumers.
+ *
+ * Read here as well as in the provider constructor because this function runs
+ * FIRST — building an SDK client around an empty key would produce an object
+ * that fails on its first request with a 401 rather than at wiring with a
+ * sentence naming the variable.
+ */
+export function requireComposioApiKey(override?: string): string {
+  const env = typeof process === "undefined" ? undefined : process.env;
+  const raw = override ?? (typeof env?.COMPOSIO_API_KEY === "string" ? env.COMPOSIO_API_KEY : "");
+  const apiKey = raw.trim();
+  if (apiKey.length === 0) throw new ComposioToolsConfigError(["COMPOSIO_API_KEY"]);
+  return apiKey;
+}
+
+/**
+ * ORIANT_ORGANIZATION_ID, WHICH IS THE FIXTURE'S FALLBACK AND NOTHING ELSE.
+ *
+ * The full account of why lives with its one legitimate caller — see
+ * ./organization.ts. Composio scopes every connected account to a user id, and
+ * this application uses the organization id for that; guessing would mean
+ * executing one business's Gmail under another business's identity, so a blank
+ * value is a throw, never a default. The value is the `organization_id` that
+ * `/api/integrations/[organizationId]/[toolKey]/connect` was called with when
+ * the owner linked their tools.
+ */
+export function requireComposioOrganizationId(override?: string): string {
+  const env = typeof process === "undefined" ? undefined : process.env;
+  const raw =
+    override ?? (typeof env?.ORIANT_ORGANIZATION_ID === "string" ? env.ORIANT_ORGANIZATION_ID : "");
+  const organizationId = raw.trim();
+  if (organizationId.length === 0) {
+    throw new ComposioToolsConfigError([
+      "ORIANT_ORGANIZATION_ID (the organization whose Composio connections the runtime acts through)",
+    ]);
+  }
+  return organizationId;
+}
+
 /* ═══════════════════════ The SDK, as this file needs it ═══════════════════════ */
 
 /** One row of `composio.connectedAccounts.list()`. Wider in the SDK; these are

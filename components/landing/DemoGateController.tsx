@@ -12,12 +12,22 @@ import { useSearchParams } from "next/navigation";
 import { sanitizePreviewSource } from "@/lib/preview-source";
 import { useDemoGate } from "@/lib/demo-gate";
 
-function QuerySync() {
+function QuerySync({ gateEnabled }: { gateEnabled: boolean }) {
   const params = useSearchParams();
   const openGate = useDemoGate((s) => s.openGate);
+  const setEnabled = useDemoGate((s) => s.setEnabled);
   const openedOnce = useRef(false);
 
+  /* The server resolved SITE_MODE; tell the client store before anything can
+     open. On the product deployment this turns every DemoGateLink into an
+     ordinary link, and a stale ?demo=locked bookmark from the marketing era
+     renders the landing page cleanly instead of a lock over a product. */
   useEffect(() => {
+    setEnabled(gateEnabled);
+  }, [gateEnabled, setEnabled]);
+
+  useEffect(() => {
+    if (!gateEnabled) return;
     if (openedOnce.current) return;
     if (params.get("demo") !== "locked") return;
     openedOnce.current = true;
@@ -26,15 +36,21 @@ function QuerySync() {
       variant: "direct",
       fromQuery: true,
     });
-  }, [params, openGate]);
+  }, [gateEnabled, params, openGate]);
 
   return null;
 }
 
-export default function DemoGateController() {
+export default function DemoGateController({
+  gateEnabled,
+}: {
+  /** Server-resolved `isMarketingSite()`; the page passes it down because
+      this is a client component and SITE_MODE must never be NEXT_PUBLIC_. */
+  gateEnabled: boolean;
+}) {
   return (
     <Suspense fallback={null}>
-      <QuerySync />
+      <QuerySync gateEnabled={gateEnabled} />
     </Suspense>
   );
 }

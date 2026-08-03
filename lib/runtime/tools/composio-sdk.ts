@@ -34,66 +34,20 @@ import { Composio } from "@composio/core";
 import {
   ComposioIntegrationProvider,
   ComposioToolsConfigError,
+  requireComposioApiKey,
+  requireComposioOrganizationId,
   type ComposioExecutionClient,
   type ComposioIntegrationProviderOptions,
 } from "./composio";
 
 /**
- * The Composio API key, or a named throw.
- *
- * Read here as well as in the provider constructor because this function runs
- * FIRST — building an SDK client around an empty key would produce an object
- * that fails on its first request with a 401 rather than at wiring with a
- * sentence naming the variable.
+ * The two configuration reads moved to ./composio (SDK-free) so that asking
+ * "is the key set?" never loads `@composio/core` — session.ts asks exactly
+ * that, and the M3 verify target imports session.ts. Re-exported here so SDK
+ * consumers keep one import site.
  */
-export function requireComposioApiKey(override?: string): string {
-  const env = typeof process === "undefined" ? undefined : process.env;
-  const raw = override ?? (typeof env?.COMPOSIO_API_KEY === "string" ? env.COMPOSIO_API_KEY : "");
-  const apiKey = raw.trim();
-  if (apiKey.length === 0) throw new ComposioToolsConfigError(["COMPOSIO_API_KEY"]);
-  return apiKey;
-}
+export { requireComposioApiKey, requireComposioOrganizationId };
 
-/**
- * ORIANT_ORGANIZATION_ID, WHICH IS NOW THE FIXTURE'S FALLBACK AND NOTHING ELSE.
- *
- * This used to be how live tool execution learned whose Gmail to send from, for
- * every plan. That was wrong, and wrong in a way configuration could not fix:
- * the answer was already on the plan. Role B's handoff carries
- * `organization.id`, `role_c_handoffs.organization_id` stores it, and
- * `ApprovedPlan.organizationId` now holds it — so an ingested plan knows its own
- * owner and must be executed through it. One organization per process, set by
- * hand, is a wrong answer waiting for the second customer on the same server.
- *
- * WHAT IS LEFT FOR IT. The BrightPath fixture is a demo company that does not
- * exist, so `BRIGHTPATH_DEMO_ORGANIZATION_ID` has no Composio connections behind
- * it and never will. When the fixture is the plan being served — a clone that
- * has ingested nothing (lib/runtime/current-plan.ts) — there is no real owner to
- * resolve, and this variable stands in so a demo can run through somebody's own
- * connections. That is its ONLY legitimate use. The decision to reach for it
- * lives in ./organization.ts, which reaches for it for the fixture and refuses
- * for anything else; this function only reads and validates.
- *
- * NOT A DEFAULT, even there — a throw. Composio scopes every connected account
- * to a user id, and this application uses the organization id for that (see the
- * header of ./composio.ts). Guessing would mean executing one business's Gmail
- * under another business's identity.
- *
- * The value is the `organization_id` that `/api/integrations/[organizationId]/
- * [toolKey]/connect` was called with when the owner linked their tools.
- */
-export function requireComposioOrganizationId(override?: string): string {
-  const env = typeof process === "undefined" ? undefined : process.env;
-  const raw =
-    override ?? (typeof env?.ORIANT_ORGANIZATION_ID === "string" ? env.ORIANT_ORGANIZATION_ID : "");
-  const organizationId = raw.trim();
-  if (organizationId.length === 0) {
-    throw new ComposioToolsConfigError([
-      "ORIANT_ORGANIZATION_ID (the organization whose Composio connections the runtime acts through)",
-    ]);
-  }
-  return organizationId;
-}
 
 /** The real SDK, narrowed to what the runtime uses. */
 export function createComposioClient(apiKey?: string): ComposioExecutionClient {

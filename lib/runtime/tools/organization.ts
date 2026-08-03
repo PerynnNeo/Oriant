@@ -137,7 +137,23 @@ const KNOWN_FIXTURE_ORGANIZATION_IDS: ReadonlySet<string> = new Set([
   MERIDIAN_DEMO_ORGANIZATION_ID,
 ]);
 import { ComposioToolsConfigError } from "./composio";
-import { providerForOrganization } from "./composio-sdk";
+/*
+ * ./composio-sdk IS LOADED AT CALL TIME, NEVER AT MODULE LOAD. That module's
+ * top level imports `@composio/core`, which is ESM-only, and THIS module is in
+ * the M3 verify target's compile graph (m3.ts → session.ts → here). Under
+ * scripts/verify.mjs everything compiles to CommonJS, so a static import here
+ * becomes a require() of an ESM entry and kills the target before its first
+ * check. The require below runs only inside `liveIntegrationProviderFor`, on
+ * the one path that genuinely needs live Composio hands — a path no verify
+ * target reaches, and on which the Next server loads the SDK exactly when it
+ * is about to be used. Same posture as the Daytona SDK's dynamic import in
+ * lib/runtime/sandbox/remote/daytona.ts, kept synchronous because the
+ * provider cache's getters must stay synchronous (see ./composio-sdk.ts).
+ */
+function loadProviderForOrganization(): typeof import("./composio-sdk").providerForOrganization {
+  const sdk = require("./composio-sdk") as typeof import("./composio-sdk");
+  return sdk.providerForOrganization;
+}
 /*
  * THE VARIABLE IS READ THROUGH THE GATE'S PARSER RATHER THAN RE-PARSED HERE, and
  * the import points UP into ../pipeline on purpose.
@@ -149,13 +165,12 @@ import { providerForOrganization } from "./composio-sdk";
  *
  * REJECTED, THOUGH IT IS THE TIDIER DIRECTION: moving `ALLOWED_ORGANIZATIONS_ENV`
  * and `allowedOrganizationIds` down here and having organization-gate.ts import
- * them. It would put the constant in the module that owns the rule, and it would
- * drag `@composio/core` into the gate's module graph — this file imports
- * ./composio-sdk, the one module that loads the SDK. lib/runtime/verify/collect.ts
- * imports the gate and is compiled to CommonJS by scripts/verify.mjs; the SDK is
- * ESM-only, so that import would make a target which never goes near Composio
- * depend on the Node version. The gate imports one type and nothing else, and
- * that stays true.
+ * them. It would put the constant in the module that owns the rule, but it puts
+ * the gate — which lib/runtime/verify/collect.ts imports — into THIS module's
+ * graph, and this module is already inside the M3 target's graph via session.ts.
+ * Since ./composio-sdk moved behind the call-time load above, that hazard is
+ * about coupling rather than the SDK: the gate imports one type and nothing
+ * else, and that stays true.
  */
 import {
   ALLOWED_ORGANIZATIONS_ENV,
@@ -454,7 +469,7 @@ export function liveIntegrationProviderFor(planOrganizationId: string): Integrat
   }
 
   try {
-    return providerForOrganization(resolved.organizationId);
+    return loadProviderForOrganization()(resolved.organizationId);
   } catch (error) {
     // Only `ComposioToolsConfigError` is expected, and by this point it can only
     // mean COMPOSIO_API_KEY went missing after session construction already

@@ -238,14 +238,13 @@ function freshDb(): Db {
 const g = globalThis as unknown as { __margoDb?: Db; __margoLock?: Promise<unknown> };
 
 export async function loadDb(): Promise<Db> {
-  if (g.__margoDb) return g.__margoDb;
-  try {
-    const raw = await fs.readFile(DB_PATH, "utf-8");
-    g.__margoDb = JSON.parse(raw) as Db;
-  } catch {
-    g.__margoDb = freshDb();
-  }
-  return g.__margoDb!;
+  /* In-memory only, per the header: Supabase is the persistence authority and
+     this object is rebuilt per process. The file read that used to live here
+     belonged to the retired data/db.json store — the merge kept its body after
+     the branch had removed the import and the path, which could never compile,
+     let alone run. */
+  if (!g.__margoDb) g.__margoDb = freshDb();
+  return g.__margoDb;
 }
 
 export async function saveDb(db: Db): Promise<void> {

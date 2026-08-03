@@ -19,10 +19,19 @@ interface DemoGateStore {
   open: boolean;
   source: PreviewSource;
   variant: DemoGateVariant;
+  /**
+   * Whether this deployment locks at all. The server resolves it from
+   * SITE_MODE (lib/site-mode.ts) and DemoGateController writes it here once;
+   * on the product deployment the CTAs are ordinary links and the gate never
+   * opens. Defaults TRUE — until the server has spoken, a marketing deployment
+   * must not flash a click's worth of unlocked navigation.
+   */
+  enabled: boolean;
   /** Control that opened the gate; focus returns to it on close. */
   returnFocus: HTMLElement | null;
   /** True when opened from ?demo=locked — closing must clean the URL. */
   fromQuery: boolean;
+  setEnabled: (enabled: boolean) => void;
   openGate: (opts?: {
     source?: PreviewSource;
     variant?: DemoGateVariant;
@@ -36,8 +45,10 @@ export const useDemoGate = create<DemoGateStore>()((set) => ({
   open: false,
   source: "discovery",
   variant: "cta",
+  enabled: true,
   returnFocus: null,
   fromQuery: false,
+  setEnabled: (enabled) => set({ enabled }),
   openGate: (opts) =>
     set({
       open: true,

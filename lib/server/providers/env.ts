@@ -23,8 +23,10 @@ export function providerEnv(): ProviderEnv {
     return {
       aiand: { model: "" },
       nosana: {},
+      elevenlabs: { model: "" },
       doubleword: { model: "" },
       daytona: { apiUrl: "" },
+      supabase: {},
     };
   }
   return {

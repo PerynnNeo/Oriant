@@ -57,7 +57,12 @@ import { InMemorySchedulerStore } from "./schedule/store";
 import type { SchedulerDeps, SchedulerStore } from "./schedule/types";
 import { InMemoryRunStore, SystemClock, createIdFactory } from "./store";
 import { StubIntegrationProvider } from "./tools";
-import { requireComposioApiKey } from "./tools/composio-sdk";
+/* From ./tools/composio, NOT ./tools/composio-sdk: this module is in the M3
+   verify target's compile graph (verify/m3.ts imports reasonerToolsMismatch),
+   and the sdk module's top-level `import "@composio/core"` is ESM-only — a
+   require() of it under scripts/verify.mjs's CommonJS compile is fatal before
+   the first check. The helper is an env read and needs no SDK. */
+import { requireComposioApiKey } from "./tools/composio";
 import { liveIntegrationProviderFor } from "./tools/organization";
 import { currentPlan, resolvePlanState, type PlanState } from "./current-plan";
 import { resolveActivePlan } from "./active-plan";
