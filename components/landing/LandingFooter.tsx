@@ -9,6 +9,7 @@
  * (on mobile it moves above the link columns).
  */
 import Link from "next/link";
+import DemoGateLink from "./DemoGateLink";
 import { ArrowUp } from "lucide-react";
 import { CTA, FOOTER } from "@/lib/landing-content";
 import BrandLogo from "@/components/brand/BrandLogo";
@@ -77,19 +78,15 @@ export default function LandingFooter() {
           <div className={styles.contact}>
             <h2 className={`lp-micro ${styles.colHead}`}>Contact</h2>
             <p className={styles.contactNote}>{FOOTER.contactNote}</p>
-            <Link
-              href={CTA.primary.href}
-              className="lp-btn lp-btn--primary lp-btn--sm"
-            >
+            <DemoGateLink className="lp-btn lp-btn--primary lp-btn--sm">
               {CTA.primary.label}
-            </Link>
+            </DemoGateLink>
           </div>
         </div>
 
         {/* ── Bottom row (incl. the single subtle sponsor note, spec §3.4) ── */}
         <div className={styles.bottom}>
           <p className={styles.copyright}>© 2026 Oriant.ai</p>
-          <p className={styles.attribution}>{FOOTER.attribution}</p>
           <a href="#top" className={styles.toTop}>
             Back to top
             <ArrowUp size={14} strokeWidth={2} aria-hidden="true" />

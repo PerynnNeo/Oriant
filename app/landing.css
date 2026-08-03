@@ -380,6 +380,13 @@
   color: var(--lp-muted-strong); /* small text — AA on all light surfaces */
 }
 
+/* ── Demo-gate scroll lock ──
+   Set by DemoGateModal while open. Freezing the root also neutralises
+   Lenis (it scrolls the window, which can no longer overflow). */
+html[data-lp-modal] {
+  overflow: hidden;
+}
+
 /* ── Visual-stage helpers ── */
 .lp-stage-grid {
   background-image:

@@ -1,8 +1,8 @@
 {
-  "name": "margo",
+  "name": "oriant-marketing",
   "version": "0.1.0",
   "private": true,
-  "description": "Margo \u2014 the done-for-you AI workforce. Learns the business, drafts the team, proves it in a sandbox, keeps the owner in control.",
+  "description": "Margo — the done-for-you AI workforce. Learns the business, drafts the team, proves it in a sandbox, keeps the owner in control.",
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/next-prod.mjs build",

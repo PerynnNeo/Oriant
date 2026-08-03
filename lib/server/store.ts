@@ -4,6 +4,16 @@
  */
 import type { Db, OnboardingQuestionDefinition } from "../contracts";
 import { FIXTURE_CALENDAR, ORG } from "../fixtures";
+import { isMarketingSite } from "@/lib/site-mode";
+
+/* Marketing hardening: the shared demo store must not be readable or
+   writable in the public deployment. Middleware already blocks /api;
+   this makes any bypassed handler fail before touching state. */
+function assertProductMode(): void {
+  if (isMarketingSite()) {
+    throw new Error("The product API is disabled in the marketing deployment.");
+  }
+}
 
 const ONBOARDING_QUESTIONS: OnboardingQuestionDefinition[] = [
   {
@@ -228,11 +238,18 @@ function freshDb(): Db {
 const g = globalThis as unknown as { __margoDb?: Db; __margoLock?: Promise<unknown> };
 
 export async function loadDb(): Promise<Db> {
-  if (!g.__margoDb) g.__margoDb = freshDb();
+  if (g.__margoDb) return g.__margoDb;
+  try {
+    const raw = await fs.readFile(DB_PATH, "utf-8");
+    g.__margoDb = JSON.parse(raw) as Db;
+  } catch {
+    g.__margoDb = freshDb();
+  }
   return g.__margoDb!;
 }
 
 export async function saveDb(db: Db): Promise<void> {
+  assertProductMode();
   g.__margoDb = db;
 }
 

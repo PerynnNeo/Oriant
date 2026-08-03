@@ -3,6 +3,7 @@
  * browser). A provider with no key runs in "fixture" mode and is honestly
  * labeled as such in the provider trace and the UI.
  */
+import { isMarketingSite } from "@/lib/site-mode";
 
 export interface ProviderEnv {
   aiand: { key?: string; baseUrl?: string; model: string };
@@ -14,6 +15,18 @@ export interface ProviderEnv {
 }
 
 export function providerEnv(): ProviderEnv {
+  /* Marketing hardening: the public deployment must never hold live
+     provider credentials. Even if keys are present in the environment,
+     marketing mode reports every provider as absent, so nothing can spend
+     credit or reach an external service. */
+  if (isMarketingSite()) {
+    return {
+      aiand: { model: "" },
+      nosana: {},
+      doubleword: { model: "" },
+      daytona: { apiUrl: "" },
+    };
+  }
   return {
     aiand: {
       key: process.env.AIAND_API_KEY || undefined,

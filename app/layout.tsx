@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope, Instrument_Serif } from "next/font/google";
+import { SITE_URL } from "@/lib/site-config";
 import "./globals.css";
 
 // Oriant.ai landing: Manrope (interface/body) + Instrument Serif (editorial accent)
@@ -18,9 +19,11 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Oriant.ai - Your AI Operations Consultant",
   description:
     "Learn how your business works, identify high-value AI opportunities, and plan a customised AI workforce with human approval built in.",
+  alternates: { canonical: "/" },
   icons: {
     icon: [
       { url: "/brand/favicon-64.png", type: "image/png", sizes: "64x64" },
@@ -33,6 +36,8 @@ export const metadata: Metadata = {
     description:
       "Discover, plan, approve, deploy, and manage an AI workforce designed around your business.",
     type: "website",
+    url: "/",
+    siteName: "Oriant.ai",
   },
 };
 

@@ -3,8 +3,13 @@
  * never clobber the dev server's `.next` (which produces the confusing
  * "__webpack_modules__[moduleId] is not a function" runtime error).
  *
- *   npm run build   →  next build  into .next-build
- *   npm start       →  next start  from .next-build
+ *   npm run build   →  next build  into .next-build   (local only)
+ *   npm start       →  next start  from .next-build   (local only)
+ *
+ * On a hosted/CI build (Vercel, etc.) there is no dev server to protect and
+ * the platform's Next.js builder expects the default `.next`, so the split is
+ * disabled there — otherwise Vercel reports ".next was not found". An
+ * explicit NEXT_DIST_DIR always wins.
  *
  * Invokes Next's CLI through Node directly (no npx/.cmd shell hop, which
  * Windows refuses to spawn), so it behaves the same on every platform.
@@ -34,9 +39,17 @@ try {
   process.exit(1);
 }
 
+// Hosted/CI builds must use the default `.next`; only split locally.
+const isHosted = Boolean(process.env.VERCEL || process.env.CI);
+const distDir = process.env.NEXT_DIST_DIR || (isHosted ? "" : ".next-build");
+
+const env = { ...process.env };
+if (distDir) env.NEXT_DIST_DIR = distDir;
+else delete env.NEXT_DIST_DIR;
+
 const child = spawn(process.execPath, [cli, command, ...process.argv.slice(3)], {
   stdio: "inherit",
-  env: { ...process.env, NEXT_DIST_DIR: ".next-build" },
+  env,
 });
 
 child.on("exit", (code, signal) => process.exit(signal ? 1 : code ?? 0));

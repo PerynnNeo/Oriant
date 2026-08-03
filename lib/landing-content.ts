@@ -16,9 +16,38 @@ export const NAV_LINKS = [
 ] as const;
 
 export const CTA = {
-  primary: { label: "Start Free Discovery", href: "/app/setup" },
+  primary: { label: "Start Free Discovery", href: "/app/onboarding" },
   secondary: { label: "See How It Works", href: "#how-it-works" },
   contact: { label: "Contact", href: "#contact" },
+} as const;
+
+/* ── Guided-demo gate (marketing-only deployment, spec §6) ─────────────── */
+
+export const DEMO_GATE = {
+  eyebrow: "Private product preview",
+  title: {
+    cta: "See Oriant.ai in action",
+    direct: "This workspace is available by guided demo",
+  },
+  body: {
+    cta: "Oriant.ai is currently available through guided demos. Contact our team to see how business discovery, AI workforce planning, human approvals, deployment, and ongoing operations could work for your company.",
+    direct:
+      "The Oriant.ai product workspace is currently private. Request a guided demo to explore the discovery, planning, deployment, approvals, and operations experience.",
+  },
+  supporting:
+    "No technical preparation is required. We will tailor the walkthrough to your business and the workflows you want to improve.",
+  primaryLabel: "Request a Guided Demo",
+  secondaryLabel: "Continue Exploring",
+  note: "Live product access is currently limited while we work with selected businesses.",
+  /** Sanitized static screenshots (fictional demo data, pre-blurred at
+      export). Keys mirror lib/route-policy.ts PreviewSource. */
+  previews: {
+    discovery: { src: "/previews/discovery.webp", width: 1600, height: 1000 },
+    planner: { src: "/previews/planner.webp", width: 1600, height: 1000 },
+    operations: { src: "/previews/workspace.webp", width: 1600, height: 1000 },
+    integrations: { src: "/previews/integrations.webp", width: 1600, height: 1000 },
+    generic: { src: "/previews/product-overview.webp", width: 1600, height: 1000 },
+  },
 } as const;
 
 /* ── Hero (brief §6) ────────────────────────────────────────────────────── */
@@ -68,9 +97,11 @@ export const FIELD_NODES: {
 export const DEMO_VIDEO = {
   heading: "See how Oriant learns, plans, and deploys",
   body: "From the first discovery conversation to an approved AI workforce, Oriant keeps every recommendation understandable and every important decision under human control.",
-  src: "/video/oriant-product-demo.mp4",
-  /** Older drop location still honoured by the player's fallback chain. */
-  legacySrc: "/videos/oriant-product-demo.mp4",
+  /** Hosted on Bunny CDN. The CSP media-src in next.config.mjs must allow
+      this host. */
+  src: "https://oriant-media-storage.b-cdn.net/Video%20demo%20real.mp4",
+  /** Local drop location, kept as the player's fallback if the CDN fails. */
+  legacySrc: "/video/oriant-product-demo.mp4",
   poster: "/video/product-demo-poster.jpg",
   title: "Oriant.ai product walkthrough: discovery to deployed AI workforce",
   /** Shown to all users while no demo video file exists (see public/video/README.txt). */
@@ -554,9 +585,6 @@ export const FOOTER = {
     "Oriant.ai: AI operations planning and workforce management for growing businesses.",
   contactNote:
     "Start a free discovery and receive a clear first plan for where AI can create the most value.",
-  /** Single subtle sponsor note (spec §3.4); the Tech Stack section is gone. */
-  attribution:
-    "Built with support from AI&, Doubleword, Daytona, and Nosana.",
   productLinks: [
     { label: "Product", href: "#product" },
     { label: "How It Works", href: "#how-it-works" },
