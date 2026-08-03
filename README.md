@@ -1,134 +1,413 @@
-# Oriant.ai — landing page + Margo demo app
+# Oriant
 
-**`/` is the Oriant.ai marketing landing page** — white/black/deep-rose design
-system, animated agent-workflow hero, scroll journey, feature bento, dark
-approvals section, integrations, FAQ, and a product-video slot with a designed
-fallback (drop the file at `public/videos/oriant-product-demo.mp4` and it
-appears automatically; optional poster at `public/images/oriant-demo-poster.webp`).
-Landing code lives in `components/landing/` with all copy in
-`lib/landing-content.ts` and the design tokens in `app/landing.css`.
-`/onboarding`, `/privacy`, and `/terms` are presentation-layer holding pages.
+> Turns a conversation about your business into a working AI workforce — and
+> stops every agent short of the one thing that matters, so a person decides it.
 
-**`/demo` is the original Margo product demo**, unchanged, described below.
+A small-business owner describes how they operate. Oriant drafts a team of
+agents, proves each one in a sandbox, and puts them live against the owner's real
+Gmail and Calendar. The point of difference is restraint: **every agent prepares
+work and stops, and nothing reaches a customer until a human approves it.**
 
-# Margo — your AI operations manager
-
-> She learns the shop, hires the team, and runs it past you first.
-
-Margo is an AI-workforce design and operations platform for small businesses,
-built from the **Tandemry product blueprint** (`reference/blueprint.txt`) with
-the **Margo design** (`reference/Margo.dc.html`) as the final look. One guided
-journey: a kickoff call → an editable, approvable company brief → a drafted
-team of preset + custom agents → asynchronous package generation → sandbox
-validation → a live operations floor with human approvals and a calendar.
-
-## Quick start
+Built for owners who cannot afford an ops hire and cannot risk an autonomous one.
 
 ```bash
 npm install
 npm run dev        # → http://localhost:3000
+npm run verify     # the executable proof — no keys, no network
 ```
 
-That's it — the app runs end-to-end out of the box in **fixture mode** (the
-prepared Overtone Coffee demo journey, honestly labeled). To go live, add
-provider keys:
+The runtime needs no key, no database and no `.env` to run end to end: a fixture
+reasoner, stub tools, a file-backed store and no background poller. Nothing
+reaches a real customer. Two caveats worth knowing before you start:
+
+- **The product shell at `/app/*` needs Supabase.** It fetches `/api/state` on
+  mount and blocks with a configuration message if that fails. The marketing page
+  at `/` and the whole verification suite need nothing.
+- **`npm run verify` currently requires Node 22+** and is red on Node 20. See
+  [Verification](#verification) — it is a tooling break, not a product defect.
+
+---
+
+## The problem, and why the interesting part isn't the model
+
+Small businesses lose hours a week to work that is repetitive but not safe to
+automate blindly — answering the same customer questions, chasing the same
+appointments, sending the same campaigns. Tools that promise to automate it
+either need a developer, or they act on their own and give the owner no way to
+see what they are about to do.
+
+The interesting problem is not *"can a model draft a reply"*. It is:
+
+> **How do you let something act on a real business without the owner losing
+> control of it?**
+
+So the product is built around the gates, not the model. The agent is treated as
+untrusted throughout.
+
+---
+
+## The four ideas the whole system rests on
+
+### 1. A plan is a contract, not a prompt
+
+`ApprovedPlan` is a validated structure — agents, workflows, ordered step
+sequences, tool grants, policy limits, the organization that owns it. Seventeen
+validator rules refuse a plan that cannot be enforced, and 21 negative fixtures
+prove each rule actually fires.
+
+> **If a limit exists only in prose, it is not a limit.** Prose goes into the
+> prompt (what the agent *tries* to do); structure goes into the runtime (what it
+> is *allowed* to do). An LLM cannot be trusted to enforce its own constraints,
+> so the runtime enforces them outside the model.
+
+The runtime *interprets* the step list rather than executing generated code.
+Generated code can never fail to compile, execution order is identical in sandbox
+and production, and the model cannot invent a tool call policy did not sanction.
+
+Four step kinds exist: `fetch` (read-only), `reason` (LLM, no side effects),
+`act` (side-effecting, gated) and `approve` (an unconditional checkpoint).
+
+### 2. Policy resolves in a fixed order, and fails closed
+
+Every action passes six checks, in this order and no other:
+
+| # | Check | Outcome |
+|---|---|---|
+| 1 | operation is `forbidden` (agent or org-wide) | **refuse** — never escalated to a human |
+| 2 | operation not granted in `tools[].operations` | **refuse** |
+| 3 | operation in `alwaysApprove` | **approval** |
+| 4 | mode is `draft_only` | **approval** |
+| 5 | mode is `act_after_approval` | **approval** |
+| 6 | mode is `auto_within_limits` | evaluate limits → act / approve / block |
+
+Two details carry most of the safety. The hard deny is checked **before** the
+grant list, so a refund stays refused even if a future plan mistakenly grants it.
+And a limit whose metric was never measured counts as **breached, not satisfied** —
+absence of evidence is never treated as safety.
+
+Step 6 is a *guarded* branch with an explicit refusal after it. An unrecognised
+operating mode cannot fall through into the one path that acts unattended.
+
+### 3. The approval interrupt is real
+
+When an action needs a human, the run **freezes**: the invocation is persisted
+with its exact arguments, the run stops at its cursor, and it resumes by replaying
+that frozen call after the owner decides. If the owner edits the arguments first,
+the merged call is what executes — *what they approved is what runs*.
+
+That is why durable storage matters. A run paused for four hours must outlive the
+process it paused in, so the default store writes to disk and Postgres is
+available for deployments that need more.
+
+### 4. Nothing goes live on a button
+
+Activation re-derives three gates on **every read** — packages built, sandbox
+passed, required integrations connected — and refuses with the specific blocker.
+
+There is no force flag anywhere in the codebase.
+
+---
+
+## The flow, end to end
+
+```
+  ┌── Discovery ──────────────────────────────────────────────────────┐
+  │  Voice or chat conversation → company report → owner approves     │
+  └───────────────────────────────┬───────────────────────────────────┘
+                                  │  approved report
+  ┌── Plan ──────────────────────▼───────────────────────────────────┐
+  │  Drafts the workforce → owner edits → approves → writes a handoff │
+  └───────────────────────────────┬───────────────────────────────────┘
+                                  │  role_c_handoffs row (Supabase)
+  ┌── Build + Operate ───────────▼───────────────────────────────────┐
+  │                                                                   │
+  │  INGEST     handoff → ApprovedPlan, validated (17 rules)          │
+  │     ↓                                                             │
+  │  BUILD      one package per agent — prompts, bindings, allowlist  │
+  │     ↓       gate: every agent built                               │
+  │  SANDBOX    scenarios + stress sweep against stubbed tools        │
+  │     ↓       gate: verdict green (deterministic, replayable)       │
+  │  ACTIVATE   three gates re-derived → triggers registered → live   │
+  │     ↓                                                             │
+  │  RUN        scheduler fires → agent works → pauses at the gate    │
+  │     ↓                                                             │
+  │  APPROVE    owner reviews, edits, decides → run resumes           │
+  │     ↓                                                             │
+  │  OPERATE    workspace · approvals · calendar · agents · tools     │
+  └───────────────────────────────────────────────────────────────────┘
+```
+
+`POST /api/runtime/pipeline` runs the whole Build + Operate half in one pass — six
+stages, each of which can stop it, each saying why in the owner's language.
+
+---
+
+## Repository map
+
+```
+app/
+  page.tsx                    marketing landing page
+  app/                        the product — 19 routes under one shell
+    setup/ onboarding/        guided discovery, voice, Lean Canvas
+    discovery/                interview, review, company report      (Gate 1)
+    planner/                  workforce plan, per-agent config       (Gate 2)
+    integrations/             Composio OAuth connection
+    build/ sandbox/ deploy/   factory, proof, activation             (live only)
+    pipeline/                 one-pass runner                        (live only)
+    workspace/                operate: approvals, calendar, agents, integrations
+  api/                        61 route files, 74 handlers
+    runtime/*                 the runtime's HTTP surface (14 routes)
+    planner/* integrations/*  the plan lane (17 routes)
+    onboarding/ discovery/ report/   the discovery lane
+  demo/                       legacy Margo prototype, kept intact
+
+lib/
+  plan/
+    types.ts validate.ts      the ApprovedPlan contract + 17 validator rules
+    ingest/                   handoff → ApprovedPlan (with named assumptions)
+    fixtures/                 brightpath.ts, meridian.ts — the demo plans
+  runtime/
+    executor.ts               the step loop and the approval interrupt
+    policy.ts                 the six-step resolution order
+    factory.ts build/         plan → agent packages, with a build gate
+    sandbox/                  scenarios, stress sweep, determinism
+      remote/                 Daytona isolation — scenarios run off-machine
+    schedule/                 cron, triggers, job queue, worker, activation
+    persist/                  durable stores (file + Postgres, 13 tables)
+    tools/                    runtime capability → Composio tool, one mapping
+    pipeline/                 the one-pass runner and its gates
+    verify/                   the executable proof of every milestone
+
+components/
+  live/                       screens backed by the real runtime
+  mock/                       the scripted demo lane (kept working, permanently)
+  landing/                    the marketing page
+```
+
+Roughly 135k lines across `app/`, `components/` and `lib/`; about 14k of that is
+the verification suite.
+
+---
+
+## Two lanes, and why the choice is never inferred
+
+Several routes have **two screens**: a scripted demo that has carried the product
+since before the runtime existed, and a live one backed by the real runtime.
+
+The lane is chosen by something a person typed — never inferred from whether the
+runtime happens to hold data:
 
 ```bash
-cp .env.example .env.local   # then fill in the keys you have
+?live=1                     # this request, live
+?live=0                     # this request, scripted (wins over any default)
+ORIANT_APPROVALS_LANE=live  # one surface
+ORIANT_OPERATE_LANE=live    # the whole Operate surface
+ORIANT_RUNTIME_MODE=live    # the fallback when no lane variable is set
 ```
 
-| Provider | Powers | Env vars |
+Resolution runs in that order, and the last line matters: a **live-armed runtime
+defaults its Operate screens to live**, so a deployment with real tools and real
+pending approvals does not show scripted fiction to anyone who did not know to
+type `?live=1`. A fixture deployment still defaults to the demo.
+
+> Inferring would be wrong twice over: a demo would silently become a live
+> decision surface the first time somebody activated a plan, and a live screen
+> would silently become a scripted one the moment the runtime went quiet — which
+> is precisely when an owner most needs to be told nothing is there.
+
+An unrecognised value (`?live=yes`) is **refused** with a message naming the
+setting, the value and the accepted forms — never quietly resolved to the demo,
+because the scripted screens are convincing and their controls change nothing.
+
+Four routes have no scripted lane at all and always read the runtime:
+`/app/build`, `/app/sandbox`, `/app/deploy`, `/app/pipeline`.
+
+---
+
+## Configuration
+
+Everything below is optional. Unset, the runtime runs fully in fixture mode.
+
+| Variable | What it does |
+|---|---|
+| `ORIANT_RUNTIME_MODE` | `fixture` (default) or `live` — picks the **reasoner** only |
+| `ORIANT_RUNTIME_TOOLS` | unset (stub tools) or `composio` — picks the **tool clients** |
+| `ORIANT_RUNTIME_STORAGE` | `file` (default), `memory`, or `postgres`/`supabase` with `DATABASE_URL`. An unrecognised value **throws** — for storage, the dangerous default is "forgets something" |
+| `ORIANT_RUNTIME_DATA_DIR` | where the file store lives (default `data/runtime/`) |
+| `ORIANT_POLLER` | `on` starts the background scheduler. Default off, so `npm run dev` never silently dispatches a workforce |
+| `ORIANT_OPERATE_LANE` | `live` / `demo` — Operate-surface default |
+| `ORIANT_ALLOWED_ORGANIZATION_IDS` | the only gate on live tool execution |
+| `DATABASE_URL` | Postgres, for the durable stores |
+| `AIAND_*` | the reasoner, for `live` mode. Missing keys throw at wiring, not at the first step |
+| `COMPOSIO_API_KEY` | real Gmail / Calendar tool execution |
+| `DAYTONA_API_KEY` | optional sandbox isolation (`npm run daytona:check`) |
+
+> **The two switches are deliberately independent, and the pairing is a trap.**
+> `ORIANT_RUNTIME_MODE=live` alone gives you a real model with **stub hands** —
+> nothing leaves the process. Real execution needs `ORIANT_RUNTIME_TOOLS=composio`
+> as well. The reverse combination (real tools behind the fixture reasoner) is
+> refused loudly at wiring, because the fixture reasoner answers in the runtime's
+> own vocabulary and every argument list would fail the tool's schema gate.
+
+See [`docs/RUNTIME_SETUP.md`](docs/RUNTIME_SETUP.md) for which key becomes
+necessary when, and [`.env.example`](.env.example) for the annotated list — note
+it is currently missing `COMPOSIO_API_KEY` and the `ELEVENLABS_*` set.
+
+**A credential never widens what an agent may do.** Policy is evaluated before
+any client is called: a valid token does not let a forbidden operation through,
+and it does not let an `alwaysApprove` operation skip approval.
+
+---
+
+## Verification
+
+The runtime is covered by an executable suite rather than assertions in a
+document. `scripts/verify.mjs` compiles a slice of the codebase with the repo's
+own TypeScript into a temp directory, runs it, and exits non-zero on failure.
+
+```bash
+npm run verify          # the whole sweep
+npm run verify:m1       # one milestone
+npm run verify:pg       # 12 checks executing real SQL (needs DATABASE_URL)
+npm run daytona:check   # is remote sandbox isolation available?
+```
+
+Two properties make the suite worth trusting. **A tripwire:** each target
+declares its expected check count, so a silently deleted check fails the build
+rather than quietly reducing coverage. **Determinism:** the passing targets are
+byte-identical run to run, including every event timestamp and id — time arrives
+through an injected `Clock` and ids through an injected factory, with no `Date.now()`,
+`Math.random()` or `randomUUID()` in runtime library code. The sandbox verdict
+that Activation gates on cannot be flaky, because a flaky gate is no gate.
+
+### Current status
+
+**`npm run verify` exits 1 on Node 20.** It passes M0–M2 and then dies at M3:
+
+```
+Error [ERR_REQUIRE_ESM]: require() of ES Module
+  node_modules/@composio/core/dist/index.mjs not supported
+```
+
+The harness compiles to CommonJS and `@composio/core` is ESM-only;
+`lib/runtime/session.ts` statically imports `./tools/composio-sdk`, which imports
+the SDK, so any target whose graph reaches the session crashes at module load.
+The affected targets **compile cleanly** — this is a loader problem, not a
+correctness one.
+
+| Status | Targets | Checks |
 |---|---|---|
-| **AI&** | Discovery → company brief, workforce planning, natural-language plan changes (strict JSON-schema outputs) | `AIAND_API_KEY`, `AIAND_BASE_URL`, `AIAND_MODEL` |
-| **Nosana** | Whisper voice transcription on the kickoff call (typed input always works as fallback) | `NOSANA_WHISPER_URL`, `NOSANA_API_KEY` |
-| *(none — browser)* | **Margo's own voice**: she reads her questions aloud via the Web Speech API. Toggle it with the "Her voice" control on the call. No key required. | — |
-| **Doubleword** | Async generation of each agent's package (prompt, YAML, policies, tests, docs) | `DOUBLEWORD_API_KEY`, `DOUBLEWORD_BASE_URL`, `DOUBLEWORD_MODEL` |
-| **Daytona** | Isolated sandbox validation of every generated package before activation | `DAYTONA_API_KEY`, `DAYTONA_API_URL` |
-| **Supabase** | Role A onboarding persistence, organization capture, audit/system logs, blueprint versions and Role B handoff mirroring | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| ✅ Passing | m0 28 · m1 19 · m2 13 · m4 17 · m5 9 · tools 35 · ingest 9 · e2e 10 · planstate 7 · gmailworkforce 10 · integration 8 | **165** |
+| ❌ Blocked | m3 19 · m6 9 · m7 8 · collect 14 | **50** |
+| ⏸ Opt-in | pg 12 | — |
 
-Providers are independent — configure any subset. Missing ones stay in fixture
-mode and every screen/badge/provider-trace entry says so (the blueprint's
-"mock honesty" rule).
+Run it on **Node 22+**, where `require(ESM)` is supported. Nothing pins the
+version today — there is no `engines` field, no `.nvmrc` and no CI.
 
-## Role A onboarding persistence
+### Three findings worth naming, because they show what the tests are for
 
-Role A now includes a server-side onboarding engine for:
+- A collector bug put the claim marker in `consumed_at` while the writer only
+  reset `status`. The first collection of a plan worked and **every revision after
+  it was invisible forever** — with the whole suite green, because nothing had
+  ever collected the same plan twice. `COLLECT-3` is now that second cycle.
+- `GET /api/runtime/agents` hung after one request: issuing more concurrent
+  queries than the connection pool holds wedges it permanently against the
+  Supabase pooler. Reproduced in isolation, fixed with an in-flight gate, guarded
+  by `PG-12`.
+- The organization allowlist was enforced per route; an audit found five more
+  paths reaching live execution while the gate's own comment claimed full
+  coverage. It now lives at the single function that produces a live tool client,
+  which covers routes not yet written.
 
-- shared Type/Talk onboarding sessions;
-- organization shape, employee count and approval-owner capture;
-- transcript-linked voice answers;
-- Business Blueprint generation and Human Approval Gate 1;
-- Role B handoff records;
-- audit and system-event mirroring to Supabase.
+---
 
-Without Supabase env vars, onboarding still works against the local file-backed
-store. When Supabase is configured, the onboarding session is mirrored into the
-tables defined in `supabase/migrations/20260728_role_a_onboarding.sql`.
+## Known limitations
 
-## The journey
+Stated rather than left to be found.
 
-1. **The call** — Margo interviews you (goals chips, systems chips, Lean Canvas
-   upload-or-build, operations, guardrails, clarifiers). Voice answers are
-   transcribed by Nosana Whisper when configured; the transcript is always shown
-   for you to correct before it's submitted, and typing always works.
-2. **The brief** — Discovery (AI&) writes a document-style company report:
-   editable, evidence-labeled, versioned. **Approving locks the version** as the
-   only planning input; editing after approval re-opens it and marks the plan stale.
-3. **Build the team** — the Planner drafts preset + custom agents. Drag from the
-   library, configure presets (operating mode, channels, knowledge, approval
-   categories, credentials *by reference*), run the custom-agent design call,
-   ask Margo for changes in plain English (preview diff → apply → undo), watch
-   the price update. **Confirm is blocked until every agent is ready.**
-4. **The factory** — one async Doubleword job per agent generates
-   `agent.yaml, workflow.yaml, prompt.md, tools.yaml, permissions.yaml,
-   test-cases.yaml, required-integrations.json, README.md`. Leave the page;
-   jobs keep running (state lives server-side in `data/db.json`).
-5. **The sandbox** — every package is validated (schema, secret scan, tool
-   allowlist, permission policy, test cases) in a Daytona sandbox when live.
-   **No automatic privilege expansion**: unexpected files/permissions from
-   generation are discarded and warned about.
-6. **The floor & your desk** — active agents, live event feed, approval queue
-   with approve/reject (audited), and the month calendar.
+**Security**
 
-## Architecture
+- **`/api/runtime/*` is unauthenticated** — and so is every other API group. There
+  is no middleware, no session check and no 401 anywhere; all 46 mutating
+  handlers are open, including activation and the scheduler.
+  `ORIANT_ALLOWED_ORGANIZATION_IDS` gates live tool execution only. This is the
+  gap that makes the rest of the safety work theoretical, and the first thing to
+  fix.
 
-```
-app/api/*            HTTP boundary (thin routes)
-lib/server/
-  orchestrator.ts    Deterministic lifecycle: transitions, gates, versions,
-                     stale-marking, audit. AI proposes; this applies.
-  store.ts           data/db.json file store (the single source of truth)
-  discovery.ts       Call → CompanyReport (AI& or labeled fixture)
-  planner.ts         Report → WorkflowPlan; NL instruction → reviewable diff
-  factory.ts         AgentSpec → artifact bundle (templates = fixture + the
-                     contract live generations must match)
-  builder.ts         Async build jobs (Doubleword submit/poll or simulated)
-  providers/         aiand · nosana · doubleword · daytona adapters (+env)
-lib/
-  contracts.ts       Shared typed contracts (report, plan, spec, jobs, runs…)
-  store.ts           Client store (zustand) — UI state + server sync
-  vals.ts            View-models named 1:1 after the design's template vars
-  fixtures.ts        The Overtone Coffee demo content (labeled fixture)
-components/          Pixel-faithful port of reference/Margo.dc.html
-```
+**What actually crosses the plan seam**
 
-Hard rules enforced server-side (from the blueprint):
+The path from planner to runtime is real — the planner writes a Supabase handoff
+row and the runtime reads and claims it — but what arrives is thinner than the
+contract allows, and the ingest adapter names every assumption it makes:
 
-- Planner can't run from an unapproved brief; builds need an approved plan;
-  activation needs passed validation (F-05/F-10/F-12).
-- Every approved object records who/when; ~200 recent audit events kept.
-- Secrets never appear in generated files — credentials are referenced by name
-  (`gorgias_api`), and the secret scan fails any bundle that violates this.
-- Undo restores the previous plan *version* server-side (no client-side guessing).
+- Workflow **steps are synthesised**; the planner ships none.
+- **Triggers become `manual`**, so nothing ingested fires on its own.
+- **Business outcomes are placeholders**, so the Workspace cannot show real
+  progress against them.
+- **`operatingMode` is forced to `draft_only`** with no limits, because the
+  planner ships no approval boundaries. Safe, but not what the owner chose.
+- Tool grants are **tool-level, not operation-level** — coarser than the contract
+  intends, and safe only because everything is `draft_only`.
 
-## Demo tips
+With nothing ingested the runtime serves a demo plan, and every runtime-only
+screen carries a full-width "sample workforce" notice.
 
-- `POST /api/reset` (or delete `data/db.json`) → clean session for rehearsal.
-- The provider trace is in `data/db.json → providerRuns` — each entry shows
-  `provider / operation / status / mode` so you can prove which sponsor did what.
-- `npm run dev` and `npm run build` use separate output directories
-  (`.next` vs `.next-build`, via `scripts/next-prod.mjs`), so building while
-  the dev server runs is safe. If you ever do see a stray
-  `__webpack_modules__[moduleId] is not a function`, delete both directories
-  and restart — that error always means stale/mixed build artifacts, never a
-  code fault.
+**Built but not reachable**
+
+- **Daytona isolation** works and was proven remotely, but nothing in the app
+  constructs it — it runs from the verification path only.
+- **The notifications surface** is complete and imported by no screen.
+- **Event and threshold triggers** are written and correct, but nothing delivers
+  an event or a metric to them, so agents sweep on a schedule rather than
+  reacting.
+
+**Runtime**
+
+- **A real approved send has not been completed end to end.** Everything up to
+  the approval is verified against live Gmail; the final send has not been
+  exercised.
+- **HubSpot and QuickBooks cannot be served** — Composio publishes no invoice,
+  payment, refund or note tool for either. Plans needing them are refused by name
+  rather than silently degraded.
+- **One `act` step is one tool call.** Nothing fans an action out over a list.
+- **Outcome metrics show baseline and target only.** Nothing measures a live
+  `current` value, so it renders as unmeasured rather than invented.
+- `maxRunsPerDay` and resume races are closed **in-process only**; two workers
+  over one store can still race, and the code says so where it matters.
+- Multi-channel approval delivery (WhatsApp, Telegram, email) is **in-app only**.
+  There is no channel toggle, and deliberately no fake one.
+
+**Scripted demo**
+
+- Discovery, onboarding, planner, integrations, setup and the Operate screens
+  still default to the scripted lane. Build, Sandbox, Activation and Pipeline are
+  live-only; the Operate screens have live implementations behind the lane switch.
+- The scripted journey **no longer advances past `plan_review`** — the real plan
+  approval writes plan status without advancing the demo state machine.
+- The ⌘K command palette and the "Do it for me" autopilot are scripted and reach
+  no agent.
+
+---
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`docs/SUBMISSION.md`](docs/SUBMISSION.md) | the full write-up and repository review guide |
+| [`docs/PLAN_CONTRACT.md`](docs/PLAN_CONTRACT.md) | the ApprovedPlan contract — the seam between planning and execution |
+| [`docs/ROLE_C_PLAN.md`](docs/ROLE_C_PLAN.md) | build + operate execution plan, milestone by milestone, with honest status |
+| [`docs/RUNTIME_SETUP.md`](docs/RUNTIME_SETUP.md) | which key, what for, and when |
+| [`docs/STORAGE.md`](docs/STORAGE.md) | the storage decision and its migration path |
+| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | the scripted walkthrough |
+
+---
+
+## Stack
+
+Next.js 15 (App Router) · React 19 · TypeScript strict · Zustand ·
+Framer Motion · Composio (tool execution) · Supabase / Postgres (durable state) ·
+Daytona (sandbox isolation) · esbuild (sandbox runner bundling)
+
+No test framework: `scripts/verify.mjs` compiles the relevant slice with the
+repo's own TypeScript and runs it, so the checks work on a clean clone with
+nothing installed beyond `npm install`.
