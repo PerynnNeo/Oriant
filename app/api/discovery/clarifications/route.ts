@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withDb } from "@/lib/server/store";
 import { hydrateDiscoveryFromSupabase, hydrateOnboardingFromSupabase, mirrorOnboardingToSupabase } from "@/lib/server/onboarding-supabase";
 import { generateDiscoveryClarifications } from "@/lib/server/discovery-clarification-agent";
+import { discoveryGraphEnabled, runDiscoveryGraph } from "@/lib/server/discovery-graph";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,9 @@ export async function POST() {
   const payload = await withDb(async (db) => {
     await hydrateOnboardingFromSupabase(db);
     await hydrateDiscoveryFromSupabase(db);
-    const result = await generateDiscoveryClarifications(db);
+    const result = discoveryGraphEnabled()
+      ? await runDiscoveryGraph(db, "clarifications")
+      : await generateDiscoveryClarifications(db);
     db.call.clarificationQuestions = result.questions;
     db.call.clarificationAnswers = db.call.clarificationAnswers ?? {};
     if (result.questions.length === 0) db.call.clarificationCompletedAt = new Date().toISOString();
